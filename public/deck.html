@@ -166,6 +166,8 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:'Inter',s
 
 /* EDIT MODE */
 .setbtn.edit-on{border-color:var(--ac);color:var(--ac);background:var(--adim);}
+@keyframes spin-once{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.setbtn.rnd-spin{animation:spin-once .45s ease;pointer-events:none;}
 .tab-edit-btn{width:18px;height:18px;border:none;background:rgba(56,189,248,.15);color:var(--ac);border-radius:3px;cursor:pointer;font-size:.55rem;display:inline-flex;align-items:center;justify-content:center;margin-left:3px;vertical-align:middle;transition:all .15s;}
 .tab-edit-btn:hover{background:var(--adim);}
 .tab-del-btn{width:18px;height:18px;border:none;background:rgba(239,68,68,.1);color:#ef4444;border-radius:3px;cursor:pointer;font-size:.55rem;display:inline-flex;align-items:center;justify-content:center;margin-left:2px;vertical-align:middle;transition:all .15s;}
@@ -374,6 +376,7 @@ body::after{
 
   <div class="searchbar">
     <input type="text" class="sbox" id="srch" placeholder="Search..." oninput="render()">
+    <button class="setbtn" onclick="triggerRandom()" id="rnd-btn" title="Random Trigger — pilih meme acak">🎲</button>
     <button class="setbtn" onclick="toggleEditMode()" id="edit-mode-btn" title="Edit Mode">✏️</button>
     <button class="setbtn sc-mode-btn" id="sc-mode-btn" onclick="toggleShortcutMode()" title="Shortcut Mode">⌨</button>
     <button class="setbtn" onclick="openSettings()" title="Settings">⚙</button>
@@ -892,6 +895,42 @@ function dropOn(e, targetName) {
   // Force re-render without reloading from server
   lastSig = '';
   render();
+}
+
+// ─── TOAST ──────────────────────────────────────────────
+function toast(msg, color) {
+  let el = document.getElementById('deck-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'deck-toast';
+    el.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);padding:7px 16px;border-radius:8px;font-size:.72rem;font-weight:700;z-index:9999;transition:opacity .3s;pointer-events:none;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = color || 'var(--ac)';
+  el.style.color = color ? '#fff' : '#000';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 1800);
+}
+
+// ─── RANDOM TRIGGER ──────────────────────────────────────
+// Simpan filename terakhir agar tidak repeat dua kali berturut-turut
+let _lastRandom = null;
+async function triggerRandom() {
+  const btn = document.getElementById('rnd-btn');
+  if (btn) { btn.classList.add('rnd-spin'); setTimeout(() => btn.classList.remove('rnd-spin'), 450); }
+  try {
+    const params = _lastRandom ? '?exclude=' + encodeURIComponent(_lastRandom) : '';
+    const r = await fetch('/trigger/random' + params);
+    const data = await r.json();
+    if (!data.ok) { toast(data.error || 'Tidak ada media', '#ef4444'); return; }
+    _lastRandom = data.filename;
+    // Highlight kartu yang terpilih di grid (sama seperti trigger biasa)
+    active = data.filename;
+    document.querySelectorAll('.card').forEach(c => c.classList.toggle('act', c.dataset.nm === data.filename));
+    toast('🎲 ' + data.filename);
+  } catch(e) { toast('Error: ' + e.message, '#ef4444'); }
 }
 
 // ─── TRIGGER ─────────────────────────────────────────────

@@ -219,6 +219,46 @@ app.post('/trigger', (req, res) => {
   io.emit('show-media', req.body);
   res.json({ ok: true });
 });
+
+// GET /trigger/random — pilih file media secara acak lalu trigger ke OBS overlay
+// WAJIB ditempatkan SEBELUM /trigger/:filename agar "random" tidak dianggap filename
+// Query params opsional:
+//   ?type=video|image|audio  → filter by type (bisa multi: ?type=video&type=image atau ?type=video,image)
+//   ?exclude=filename         → skip file ini (cegah repeat dari trigger sebelumnya)
+app.get('/trigger/random', (req, res) => {
+  try {
+    const exts = {
+      image: ['.jpg','.jpeg','.png','.gif','.webp'],
+      video: ['.mp4','.webm','.mov'],
+      audio: ['.mp3','.wav','.ogg'],
+    };
+    const allExts = Object.values(exts).flat();
+
+    // Parsing ?type= — bisa ?type=video&type=image atau ?type=video,image
+    const typeParam = [].concat(req.query.type || []).join(',');
+    const types = typeParam ? typeParam.split(',').map(t => t.trim()).filter(Boolean) : [];
+    const allowedExts = types.length ? types.flatMap(t => exts[t] || []) : allExts;
+
+    if (!allowedExts.length) return res.status(400).json({ ok: false, error: 'invalid type filter' });
+
+    const exclude = req.query.exclude ? path.basename(decodeURIComponent(req.query.exclude)) : null;
+
+    let candidates = fs.readdirSync(MEDIA_DIR)
+      .filter(f => !f.startsWith('_') && allowedExts.includes(path.extname(f).toLowerCase()));
+
+    // Buang file exclude agar tidak repeat dua kali berturut-turut (kalau masih ada kandidat lain)
+    if (exclude && candidates.length > 1) candidates = candidates.filter(f => f !== exclude);
+
+    if (!candidates.length) return res.status(404).json({ ok: false, error: 'No media found' });
+
+    const filename = candidates[Math.floor(Math.random() * candidates.length)];
+    const meta = loadMeta();
+    incrementTrigger();
+    io.emit('show-media', { filename, ...(meta[filename] || {}) });
+    res.json({ ok: true, filename });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.get('/trigger/:filename', (req, res) => {
   incrementTrigger();
   const filename = path.basename(decodeURIComponent(req.params.filename));
