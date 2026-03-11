@@ -1,3 +1,13 @@
+/**
+ * electron/main.js — Electron main process
+ *
+ * Tugas utama:
+ * 1. Fork server.js sebagai child process
+ * 2. Buat BrowserWindow yang load http://127.0.0.1:PORT/
+ * 3. Kelola System Tray & Global Shortcut
+ * 4. Handle IPC dari renderer (preload.js)
+ */
+
 const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const http = require('http');
@@ -21,15 +31,17 @@ const CONFIG_FILE = path.join(USER_DATA, 'config.json');
 });
 
 // ── CONFIG ───────────────────────────────────────────────
+// loadConfig/saveConfig untuk preferensi user (folder assets kustom, dll)
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
 }
 function saveConfig(cfg) {
   try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2)); }
-  catch(e) { log(`saveConfig failed: ${e.message}`); }
+  catch(e) { log(`saveConfig failed: ${e.message}`); } // error di-log, tidak ditelan diam-diam
 }
 
 // ── LOGGING ─────────────────────────────────────────────
+// Log ke console DAN ke file app.log di USER_DATA (bisa dilihat dari tray menu)
 const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -55,10 +67,13 @@ function getLocalIP() {
 }
 
 // ── START SERVER ─────────────────────────────────────────
+// server.js di-fork sebagai child process terpisah (bukan thread).
+// stdout/stderr dari server di-pipe ke file log agar bisa di-debug.
 function startServer() {
   const cfg = loadConfig();
-  const assetsDir = cfg.assetsDir || ASSETS_DIR;
+  const assetsDir = cfg.assetsDir || ASSETS_DIR; // pakai folder kustom jika user sudah set
 
+  // Di packaged app, server.js ada di app.asar.unpacked karena perlu dieksekusi langsung
   const serverPath = app.isPackaged
     ? path.join(process.resourcesPath, 'app.asar.unpacked', 'server.js')
     : path.join(__dirname, '..', 'server.js');
@@ -103,10 +118,11 @@ function createWindow() {
     show: false,
   });
 
+  // Jangan langsung load URL — server butuh waktu untuk siap.
+  // tryLoad polling setiap 500ms sampai server merespons (max 40x = 20 detik).
   const tryLoad = (attempts = 0) => {
     const req = http.get(`http://127.0.0.1:${PORT}/`, (res) => {
-      // Consume response data to free up memory
-      res.resume();
+      res.resume(); // buang response body agar koneksi ditutup dengan benar
       log(`Server ready (attempt ${attempts})`);
       mainWindow.loadURL(`http://127.0.0.1:${PORT}/`).then(() => {
         log('Page loaded successfully');
@@ -118,9 +134,9 @@ function createWindow() {
       if (attempts < 40) setTimeout(() => tryLoad(attempts + 1), 500);
       else dialog.showErrorBox('Error', 'Server gagal start.\nLog: ' + LOG_FILE);
     });
-    req.setTimeout(1000, () => req.destroy());
+    req.setTimeout(1000, () => req.destroy()); // timeout per-attempt 1 detik
   };
-  setTimeout(() => tryLoad(), 1500);
+  setTimeout(() => tryLoad(), 1500); // delay awal 1.5 detik untuk beri waktu fork
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -132,7 +148,8 @@ function createWindow() {
     }
   });
 
-  // Show window when page actually finishes loading, not just when frame is ready
+  // Tampilkan window hanya setelah halaman benar-benar selesai load
+  // (bukan saat Electron frame siap) agar user tidak melihat layar kosong
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow && !mainWindow.isVisible()) {
       mainWindow.show();
@@ -140,7 +157,7 @@ function createWindow() {
     }
   });
 
-  // Fallback: also show on ready-to-show but with a delay to allow loadURL
+  // Fallback: kalau did-finish-load tidak terpanggil, paksa show setelah 3 detik
   mainWindow.once('ready-to-show', () => {
     setTimeout(() => {
       if (mainWindow && !mainWindow.isVisible()) {
@@ -149,14 +166,14 @@ function createWindow() {
       }
     }, 3000);
   });
+  // Tutup window → hide ke tray (tidak quit), kecuali app.isQuitting = true
   mainWindow.on('close', e => { if (!app.isQuitting) { e.preventDefault(); mainWindow.hide(); } });
   mainWindow.on('closed', () => { mainWindow = null; });
 
-  // Debug: log any page load errors
+  // Retry otomatis kalau halaman gagal load (misal server belum siap)
   mainWindow.webContents.on('did-fail-load', (e, code, desc, url) => {
     log(`did-fail-load: code=${code} desc=${desc} url=${url}`);
-    // Retry loading after a short delay if it failed
-    if (code !== -3) { // -3 = aborted (intentional), skip retry
+    if (code !== -3) { // -3 = ERR_ABORTED (intentional navigate), skip retry
       setTimeout(() => {
         log('Retrying loadURL after failure...');
         mainWindow.loadURL(`http://127.0.0.1:${PORT}/`).catch(err => {
@@ -166,6 +183,7 @@ function createWindow() {
     }
   });
 
+  // Log error dari renderer (level 2 = warning, level 3 = error)
   mainWindow.webContents.on('console-message', (e, level, msg) => {
     if (level >= 2) log(`[renderer] ${msg}`);
   });
@@ -235,7 +253,7 @@ ipcMain.on('register-shortcuts', (event, shortcuts) => {
   shortcuts.forEach(sc => {
     try {
       globalShortcut.register(sc.combo, () => {
-        // Kalau tombol dipencet, suruh UI deck.html jalanin meme-nya
+        // Shortcut dipencet → kirim ke mainWindow untuk dieksekusi di renderer
         if (mainWindow) {
           mainWindow.webContents.send('shortcut-triggered', sc.action);
         }
@@ -246,7 +264,8 @@ ipcMain.on('register-shortcuts', (event, shortcuts) => {
   });
 });
 // ── IPC ──────────────────────────────────────────────────
-// Renderer beritahu main saat user toggle shortcut
+// Renderer memberitahu main saat shortcut di-toggle ON/OFF.
+// Main update state + rebuild tray + broadcast ke semua window lain.
 ipcMain.on('set-shortcut-enabled', (event, enabled) => {
   shortcutsEnabled = !!enabled;
   rebuildTrayMenu();
@@ -272,14 +291,18 @@ ipcMain.handle('choose-folder', async () => {
 ipcMain.handle('get-local-ip', () => getLocalIP());
 
 // ── SECOND INSTANCE ──────────────────────────────────────
+// Kalau user buka app kedua kali, cukup fokus window yang sudah ada
 app.on('second-instance', () => {
   if (mainWindow) { if (!mainWindow.isVisible()) mainWindow.show(); mainWindow.focus(); }
 });
 
 // ── APP EVENTS ───────────────────────────────────────────
 app.whenReady().then(() => { startServer(); createWindow(); createTray(); });
+// Cegah Electron quit saat semua window ditutup (minimize ke tray)
 app.on('window-all-closed', e => e.preventDefault());
+// Sebelum quit: kill server process dan tutup log stream
 app.on('before-quit', () => { if (serverProcess) serverProcess.kill(); logStream.end(); });
-app.on('will-quit', () => { 
-  globalShortcut.unregisterAll(); 
+// Unregister semua shortcut saat app benar-benar keluar
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });

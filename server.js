@@ -1,3 +1,12 @@
+/**
+ * server.js — KSK Express + Socket.IO server
+ *
+ * Berjalan sebagai child process yang di-fork oleh electron/main.js,
+ * atau standalone (node server.js) untuk mode dev/Docker.
+ *
+ * Port default: 3000 (bisa di-override via env PORT)
+ */
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -6,29 +15,30 @@ const fs = require('fs');
 const os = require('os');
 const multer = require('multer');
 const { execFile, execFileSync } = require('child_process');
-const archiver = require('archiver');
-const unzipper = require('unzipper');
+const archiver = require('archiver');  // buat zip backup
+const unzipper = require('unzipper'); // ekstrak zip restore
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 // ── PATHS ────────────────────────────────────────────────
-// Kalau jalan di Electron → pakai USER_DATA_DIR dari env (AppData user)
-// Kalau jalan biasa (Docker/dev) → pakai folder __dirname seperti biasa
+// Di Electron: BASE_DIR = AppData user (bisa diubah lewat Settings)
+// Di standalone: BASE_DIR = folder project (__dirname)
 const IS_ELECTRON = !!process.env.ELECTRON;
 const BASE_DIR    = IS_ELECTRON
-  ? process.env.USER_DATA_DIR
+  ? process.env.USER_DATA_DIR  // dikirim dari main.js via env
   : __dirname;
 
+// MEDIA_DIR bisa di-override oleh Electron saat user ganti folder assets
 const MEDIA_DIR  = process.env.ASSETS_DIR_OVERRIDE || process.env.MEDIA_DIR || path.join(BASE_DIR, 'assets');
-const META_FILE  = path.join(BASE_DIR, 'meta.json');
-const THUMB_DIR  = path.join(BASE_DIR, 'thumbs');
-const TEXT_DIR   = path.join(MEDIA_DIR, 'text');
-const COUNTER_META       = path.join(BASE_DIR, 'counters.json');
-const DECK_SETTINGS_FILE = path.join(BASE_DIR, 'deck_settings.json');
-const STATS_FILE         = path.join(BASE_DIR, 'stats.json');
-const CONFIG_FILE        = path.join(BASE_DIR, 'config.json');
+const META_FILE  = path.join(BASE_DIR, 'meta.json');        // settings per-media (volume, duration, dll)
+const THUMB_DIR  = path.join(BASE_DIR, 'thumbs');           // thumbnail video yang di-cache ffmpeg
+const TEXT_DIR   = path.join(MEDIA_DIR, 'text');            // file .txt untuk counter OBS
+const COUNTER_META       = path.join(BASE_DIR, 'counters.json');       // daftar nama counter
+const DECK_SETTINGS_FILE = path.join(BASE_DIR, 'deck_settings.json'); // layout & tombol custom deck
+const STATS_FILE         = path.join(BASE_DIR, 'stats.json');          // statistik trigger
+const CONFIG_FILE        = path.join(BASE_DIR, 'config.json');         // config app (folder assets, dll)
 const PORT               = parseInt(process.env.PORT || '3000', 10);
 
 // Bikin folder kalau belum ada
@@ -41,11 +51,12 @@ console.log(`[paths] media=${MEDIA_DIR}`);
 console.log(`[paths] mode=${IS_ELECTRON ? 'electron' : 'standalone'}`);
 
 // ── MIDDLEWARE ───────────────────────────────────────────
+// Limit 50mb untuk support upload JSON besar (misal deck settings dengan banyak tombol)
 app.use(express.json({ limit: '50mb' }));
 
-// Static files — public folder ada di __dirname (folder app, bukan AppData)
-// Di dev mode (non-packaged), selalu pakai __dirname
-// Di packaged mode, pakai app.asar
+// APP_PATH = lokasi file statis (HTML, JS, lang)
+// Di dev: __dirname (folder project)
+// Di packaged Electron: di dalam app.asar (tidak perlu unpack karena hanya dibaca, tidak dieksekusi)
 const IS_PACKAGED = IS_ELECTRON && process.resourcesPath && !process.resourcesPath.includes('node_modules');
 const APP_PATH = IS_PACKAGED
   ? path.join(process.resourcesPath, 'app.asar')
@@ -53,22 +64,26 @@ const APP_PATH = IS_PACKAGED
 
 app.use(express.static(path.join(APP_PATH, 'public')));
 app.use('/lang', express.static(path.join(APP_PATH, 'lang')));
+// ksk-ui.js di-serve manual agar bisa diakses dari semua halaman
 app.get('/ksk-ui.js', (req, res) =>
   res.sendFile(path.join(APP_PATH, 'ksk-ui.js'))
 );
 
-// Route shortcuts
+// Redirect shortcut /customdeck → customdeck.html
 app.get('/customdeck', (req, res) => res.sendFile(path.join(APP_PATH, 'public', 'customdeck.html')));
 
-// Assets dari folder data user
+// Assets (gambar, video, audio) disajikan dari folder data user, bukan app.asar
 app.use('/assets', express.static(MEDIA_DIR));
 
 // ── META HELPERS ─────────────────────────────────────────
+// Pola: read-through cache + write-through ke disk.
+// Cache di memori agar tidak baca disk setiap request.
+// Saat write: update cache dulu, lalu tulis disk — data tidak pernah stale.
 let _metaCache = null;
 function loadMeta() {
   if (_metaCache) return _metaCache;
   try { _metaCache = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); }
-  catch { _metaCache = {}; }
+  catch { _metaCache = {}; } // file belum ada → default kosong
   return _metaCache;
 }
 function saveMeta(meta) {
@@ -80,6 +95,8 @@ function saveMeta(meta) {
 }
 
 // ── STATS HELPERS ────────────────────────────────────────
+// Pola sama: cache in-memory, write-through ke disk.
+// incrementTrigger() dipanggil setiap kali ada trigger meme.
 let _statsCache = null;
 function loadStatsData() {
   if (_statsCache) return _statsCache;
@@ -88,7 +105,7 @@ function loadStatsData() {
   return _statsCache;
 }
 function saveStatsData(data) {
-  _statsCache = data;
+  _statsCache = data; // update cache dulu baru disk
   try { fs.writeFileSync(STATS_FILE, JSON.stringify(data)); } catch(e) { console.error(e); }
 }
 function incrementTrigger() {
@@ -112,6 +129,8 @@ try {
 }
 
 // ── MULTER ───────────────────────────────────────────────
+// Simpan file langsung ke MEDIA_DIR dengan nama yang di-sanitasi
+// (karakter non-alphanumeric diganti _ untuk menghindari nama file bermasalah)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, MEDIA_DIR),
   filename: (req, file, cb) => {
@@ -119,9 +138,11 @@ const storage = multer.diskStorage({
     cb(null, safe);
   }
 });
+// Batas upload 500MB per file
 const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
 // ── MEDIA API ────────────────────────────────────────────
+// GET /api/media — daftar semua file media beserta settings-nya
 app.get('/api/media', (req, res) => {
   try {
     const meta = loadMeta();
@@ -136,12 +157,15 @@ app.get('/api/media', (req, res) => {
   } catch(e) { console.error(e); res.json([]); }
 });
 
+// POST /upload — upload satu atau lebih file media
 app.post('/upload', upload.any(), (req, res) => {
   if (!req.files || !req.files.length) return res.status(400).json({ ok: false, error: 'No files' });
   console.log('Uploaded:', req.files.map(f => f.filename));
   res.json({ ok: true, files: req.files.map(f => f.filename) });
 });
 
+// POST /api/media/:filename/settings — simpan settings (volume, durasi, dll) untuk satu file
+// path.basename() mencegah path traversal (misal filename = '../../etc/passwd')
 app.post('/api/media/:filename/settings', (req, res) => {
   const filename = path.basename(decodeURIComponent(req.params.filename));
   const meta = loadMeta();
@@ -149,11 +173,13 @@ app.post('/api/media/:filename/settings', (req, res) => {
   res.json({ ok: saveMeta(meta) });
 });
 
+// DELETE /api/media/:filename — hapus file media + thumbnail-nya + entry di meta
 app.delete('/api/media/:filename', (req, res) => {
   try {
     const filename = path.basename(decodeURIComponent(req.params.filename));
     const fp = path.join(MEDIA_DIR, filename);
     if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    // hapus thumbnail yang di-cache (kalau ada)
     const tp = path.join(THUMB_DIR, filename + '.jpg');
     if (fs.existsSync(tp)) fs.unlinkSync(tp);
     const meta = loadMeta();
@@ -164,15 +190,18 @@ app.delete('/api/media/:filename', (req, res) => {
 });
 
 // ── THUMBNAIL ────────────────────────────────────────────
+// GET /api/thumb/:filename — ambil thumbnail video (generate via ffmpeg jika belum ada)
+// Thumbnail di-cache di THUMB_DIR agar ffmpeg tidak dipanggil berulang kali
 app.get('/api/thumb/:filename', (req, res) => {
   const filename = path.basename(decodeURIComponent(req.params.filename));
   const videoPath = path.join(MEDIA_DIR, filename);
   const thumbPath = path.join(THUMB_DIR, filename + '.jpg');
 
   if (!fs.existsSync(videoPath)) return res.status(404).end();
-  if (fs.existsSync(thumbPath)) return res.sendFile(thumbPath);
-  if (!hasFfmpeg) return res.status(503).end();
+  if (fs.existsSync(thumbPath)) return res.sendFile(thumbPath); // cache hit
+  if (!hasFfmpeg) return res.status(503).end(); // ffmpeg tidak tersedia
 
+  // Generate thumbnail dari frame detik ke-1
   execFile('ffmpeg', [
     '-i', videoPath, '-ss', '00:00:01', '-vframes', '1',
     '-vf', 'scale=320:-2', '-pix_fmt', 'yuvj420p', '-q:v', '5', '-y', thumbPath
@@ -183,6 +212,8 @@ app.get('/api/thumb/:filename', (req, res) => {
 });
 
 // ── TRIGGER ──────────────────────────────────────────────
+// POST /trigger — trigger meme dengan body JSON (dipakai dari dashboard)
+// GET  /trigger/:filename — trigger meme via URL (dipakai dari OBS, StreamDeck, dll)
 app.post('/trigger', (req, res) => {
   incrementTrigger();
   io.emit('show-media', req.body);
@@ -192,12 +223,16 @@ app.get('/trigger/:filename', (req, res) => {
   incrementTrigger();
   const filename = path.basename(decodeURIComponent(req.params.filename));
   const meta = loadMeta();
+  // Gabungkan filename dengan settings yang tersimpan (kalau ada)
   io.emit('show-media', { filename, ...(meta[filename] || {}) });
   res.json({ ok: true });
 });
+// GET/POST /hide — sembunyikan media yang sedang tampil di OBS overlay
 app.all('/hide', (req, res) => { io.emit('hide-media'); res.json({ ok: true }); });
 
 // ── COUNTER API ──────────────────────────────────────────
+// Counter = file .txt di TEXT_DIR yang dibaca OBS sebagai Text Source
+// Pola cache sama dengan meta: read-through / write-through
 let _counterCache = null;
 function loadCounterMeta() {
   if (_counterCache) return _counterCache;
@@ -246,7 +281,9 @@ app.post('/api/counters/:filename/value', (req, res) => {
   catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// Atomic counter op — server baca file, hitung, tulis, emit socket
+// POST /api/counters/:filename/op — operasi atomic: inc / dec / reset
+// Server yang menghitung (bukan client) agar nilai selalu konsisten
+// Setelah update, emit socket 'counter-updated' ke semua client (OBS overlay)
 app.post('/api/counters/:filename/op', (req, res) => {
   const filename = path.basename(decodeURIComponent(req.params.filename));
   const filepath = path.join(TEXT_DIR, filename);
@@ -275,9 +312,12 @@ app.delete('/api/counters/:filename', (req, res) => {
 });
 
 // ── DECK SETTINGS ────────────────────────────────────────
-let _deckSettingsCache = null;
+// Sentinel: undefined = belum pernah dimuat dari disk
+//           null     = sudah dicek tapi file deck_settings.json belum ada
+// (tidak bisa pakai null sebagai sentinel karena null adalah nilai valid saat file tidak ada)
+let _deckSettingsCache = undefined;
 function loadDeckSettings() {
-  if (_deckSettingsCache) return _deckSettingsCache;
+  if (_deckSettingsCache !== undefined) return _deckSettingsCache;
   try { _deckSettingsCache = JSON.parse(fs.readFileSync(DECK_SETTINGS_FILE, 'utf8')); }
   catch { _deckSettingsCache = null; }
   return _deckSettingsCache;
@@ -321,6 +361,11 @@ function loadAppConfig() {
 app.get('/api/config', (req, res) => res.json(loadAppConfig()));
 
 // ── BACKUP & RESTORE ────────────────────────────────────
+// GET /api/backup — streaming download ZIP berisi semua assets + config
+// Struktur ZIP:
+//   config/  → meta.json, counters.json, deck_settings.json, config.json
+//   assets/  → semua file media
+//   thumbs/  → thumbnail yang sudah di-cache
 app.get('/api/backup', (req, res) => {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = 'KSK-Backup-' + timestamp + '.zip';
@@ -396,11 +441,12 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
     try { fs.unlinkSync(zipPath); } catch {}
     try { fs.rmSync(path.join(BASE_DIR, '_restore_tmp'), { recursive: true, force: true }); } catch {}
 
-    // Invalidate in-memory caches so next request re-reads from restored disk files
+    // Setelah restore: wajib invalidate semua cache agar data baru terbaca dari disk
+    // (bukan dari memori yang masih menyimpan data sebelum restore)
     _metaCache = null;
     _counterCache = null;
     _statsCache = null;
-    _deckSettingsCache = null;
+    _deckSettingsCache = undefined; // undefined agar loadDeckSettings re-read dari disk
     _appConfigCache = null;
 
     res.json({ ok: true, restoredFiles, restoredConfigs });
