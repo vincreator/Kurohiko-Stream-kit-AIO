@@ -195,8 +195,7 @@ app.get('/trigger/:filename', (req, res) => {
   io.emit('show-media', { filename, ...(meta[filename] || {}) });
   res.json({ ok: true });
 });
-app.post('/hide', (req, res) => { io.emit('hide-media'); res.json({ ok: true }); });
-app.get('/hide',  (req, res) => { io.emit('hide-media'); res.json({ ok: true }); });
+app.all('/hide', (req, res) => { io.emit('hide-media'); res.json({ ok: true }); });
 
 // ── COUNTER API ──────────────────────────────────────────
 let _counterCache = null;
@@ -276,12 +275,19 @@ app.delete('/api/counters/:filename', (req, res) => {
 });
 
 // ── DECK SETTINGS ────────────────────────────────────────
+let _deckSettingsCache = null;
 function loadDeckSettings() {
-  try { return JSON.parse(fs.readFileSync(DECK_SETTINGS_FILE, 'utf8')); } catch { return null; }
+  if (_deckSettingsCache) return _deckSettingsCache;
+  try { _deckSettingsCache = JSON.parse(fs.readFileSync(DECK_SETTINGS_FILE, 'utf8')); }
+  catch { _deckSettingsCache = null; }
+  return _deckSettingsCache;
 }
 function saveDeckSettings(data) {
-  try { fs.writeFileSync(DECK_SETTINGS_FILE, JSON.stringify(data, null, 2)); return true; }
-  catch(e) { console.error('saveDeckSettings failed:', e.message); return false; }
+  try {
+    fs.writeFileSync(DECK_SETTINGS_FILE, JSON.stringify(data, null, 2));
+    _deckSettingsCache = data;
+    return true;
+  } catch(e) { console.error('saveDeckSettings failed:', e.message); return false; }
 }
 
 app.get('/api/deck-settings', (req, res) => res.json(loadDeckSettings() || {}));
@@ -305,18 +311,14 @@ app.get('/api/local-ip', (req, res) => {
 });
 
 // ── CONFIG API ──────────────────────────────────────────
+let _appConfigCache = null;
 function loadAppConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
+  if (_appConfigCache) return _appConfigCache;
+  try { _appConfigCache = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
+  catch { _appConfigCache = {}; }
+  return _appConfigCache;
 }
 app.get('/api/config', (req, res) => res.json(loadAppConfig()));
-
-// Choose folder — hanya works di Electron (via dialog)
-app.post('/api/choose-folder', async (req, res) => {
-  if (!IS_ELECTRON) return res.json({ ok: false, error: 'Only available in Electron' });
-  // Kirim request ke Electron main process lewat IPC tidak bisa dari server
-  // User harus pilih dari Settings di Electron window
-  res.json({ ok: false, error: 'Use Electron Settings dialog' });
-});
 
 // ── BACKUP & RESTORE ────────────────────────────────────
 app.get('/api/backup', (req, res) => {
@@ -394,6 +396,12 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
 
     try { fs.unlinkSync(zipPath); } catch {}
     try { fs.rmdirSync(path.join(BASE_DIR, '_restore_tmp')); } catch {}
+
+    // Invalidate in-memory caches so next request re-reads from restored disk files
+    _metaCache = null;
+    _counterCache = null;
+    _statsCache = null;
+    _deckSettingsCache = null;
 
     res.json({ ok: true, restoredFiles, restoredConfigs });
   } catch(e) {

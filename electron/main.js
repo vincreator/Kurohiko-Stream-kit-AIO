@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Tray, Menu, shell, nativeImage, dialog, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
+const http = require('http');
 const { fork } = require('child_process');
 const os = require('os');
 const fs = require('fs');
@@ -11,7 +12,6 @@ if (!gotLock) { app.quit(); process.exit(0); }
 // ── USER DATA PATHS ──────────────────────────────────────
 const USER_DATA  = app.getPath('userData');
 const ASSETS_DIR = path.join(USER_DATA, 'assets');
-const THUMBS_DIR = path.join(USER_DATA, 'thumbs');
 const TEXT_DIR   = path.join(USER_DATA, 'assets', 'text');
 const LOG_FILE   = path.join(USER_DATA, 'app.log');
 const CONFIG_FILE = path.join(USER_DATA, 'config.json');
@@ -25,7 +25,8 @@ function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
 }
 function saveConfig(cfg) {
-  try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2)); } catch {}
+  try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2)); }
+  catch(e) { log(`saveConfig failed: ${e.message}`); }
 }
 
 // ── LOGGING ─────────────────────────────────────────────
@@ -40,7 +41,7 @@ function log(msg) {
 let mainWindow = null;
 let tray = null;
 let serverProcess = null;
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 let shortcutsEnabled = false; // default OFF
 
 function getLocalIP() {
@@ -101,10 +102,8 @@ function createWindow() {
     },
     show: false,
   });
-  
 
   const tryLoad = (attempts = 0) => {
-    const http = require('http');
     const req = http.get(`http://127.0.0.1:${PORT}/`, (res) => {
       // Consume response data to free up memory
       res.resume();
