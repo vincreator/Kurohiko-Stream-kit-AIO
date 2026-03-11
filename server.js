@@ -56,7 +56,7 @@ app.get('/ksk-ui.js', (req, res) =>
 );
 
 // Route shortcuts
-app.get('/customdeck', (req, res) => res.sendFile(path.join(__dirname, 'public', 'customdeck.html')));
+app.get('/customdeck', (req, res) => res.sendFile(path.join(APP_PATH, 'public', 'customdeck.html')));
 
 // Assets dari folder data user
 app.use('/assets', express.static(MEDIA_DIR));
