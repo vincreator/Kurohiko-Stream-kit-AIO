@@ -24,7 +24,8 @@ Ditengah jalan keinget mau nambah WC, Kamar, Pintu, Jendela,etc. Jadinya kyk ya 
 * **Low Resource:** Mengurangi beban OBS karena lo cuma butuh satu Browser Source.
 * **Local Server Based:** Semua aset ada di PC.
 * **Chroma Key:** Bisa hapus Greenscreen brooh
-* **Shortcut Keyboard** Bisa Control pake Shortcut Keyboard (kalau berat, matiin ya)
+* **Shortcut Keyboard:** Bisa Control pake Shortcut Keyboard (kalau berat, matiin ya)
+* **🎲 Random Trigger:** Trigger meme acak dari seluruh koleksi — bisa dipakai dari Deck, StreamDeck, URL, atau bot
 
 ---
 
@@ -55,6 +56,14 @@ Karena folder `node_modules` tidak disertakan di repository ini, ikuti langkah b
 6.  Buat jaga-jaga, kalau meme gak muncul pas pencet di aplikasi, coba klik kanan Browser source di obs > properties > Refresh cache.
 
 ---
+
+---
+
+## 📖 Dokumentasi Fitur
+
+| Fitur | Docs |
+|-------|------|
+| 🎲 Random Trigger | [docs/random-trigger.md](docs/random-trigger.md) |
 
 ---
 
