@@ -500,10 +500,19 @@ body::after{
               <div class="rrow"><input type="range" id="outspd" min="100" max="1500" value="350" oninput="rv(this,'rv-out','ms')"><span class="rv" id="rv-out">350ms</span></div>
             </div>
           </div>
-          <div class="fg" id="dur-wrap"><div class="fl">Durasi (detik) — 0 = manual hide</div>
-            <div class="rrow"><input type="range" id="dur" min="0" max="30" value="5" step="0.5" oninput="rv(this,'rv-dur','s');updateAccSummaries()"><span class="rv" id="rv-dur">5s</span></div>
-          </div>
         </div>
+      </div>
+
+      <!-- AUTO-HIDE TIMER — tampil untuk semua tipe media -->
+      <div class="fg" id="dur-wrap" style="background:var(--s3);border:1px solid var(--bd2);border-radius:var(--rs);padding:10px 12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div class="fl" id="dur-label" style="margin:0;">Durasi (detik) — 0 = manual hide</div>
+          <span class="rv" id="rv-dur" style="font-size:.7rem;color:var(--ac);">5s</span>
+        </div>
+        <div class="rrow">
+          <input type="range" id="dur" min="0" max="30" value="5" step="0.5" oninput="rv(this,'rv-dur','s');updateAccSummaries()">
+        </div>
+        <div style="font-size:.48rem;color:var(--tx3);margin-top:5px;" id="dur-hint">0 detik = harus hide manual. Timer mulai saat media tampil di OBS overlay.</div>
       </div>
 
       <!-- ACCORDION: Posisi & Ukuran -->
@@ -1060,7 +1069,24 @@ function openM(e,name){
   syncSnap();
 
   document.getElementById('thumb-section').style.display = (t==='video') ? '' : 'none';
-  document.getElementById('dur-wrap').style.display = (t==='video') ? 'none' : '';
+  document.getElementById('dur-wrap').style.display = '';
+  // Label & max durasi berbeda per tipe
+  const durLabel = document.getElementById('dur-label');
+  const durSlider = document.getElementById('dur');
+  const durHint = document.getElementById('dur-hint');
+  if (t === 'image') {
+    durLabel.textContent = 'Durasi (detik) — 0 = manual hide';
+    durSlider.max = 60;
+    durHint.textContent = '0 detik = harus hide manual. Timer mulai saat gambar tampil di OBS overlay.';
+  } else if (t === 'video') {
+    durLabel.textContent = 'Paksa stop setelah N detik — 0 = main sampai selesai';
+    durSlider.max = 300;
+    durHint.textContent = '0 = video main penuh sampai selesai. Isi nilai untuk stop paksa lebih awal.';
+  } else {
+    durLabel.textContent = 'Stop audio setelah N detik — 0 = main sampai selesai';
+    durSlider.max = 300;
+    durHint.textContent = '0 = audio main penuh sampai selesai. Isi nilai untuk stop paksa lebih awal.';
+  }
   document.getElementById('audio-thumb-wrap').style.display = (t==='audio') ? '' : 'none';
   document.getElementById('acc-anim').style.display = (t==='audio') ? 'none' : '';
   document.getElementById('acc-pos').style.display = (t==='audio') ? 'none' : '';
@@ -1685,7 +1711,7 @@ async function saveM(){
     animOut:document.getElementById('aout').value,
     animInSpeed:+document.getElementById('inspd').value,
     animOutSpeed:+document.getElementById('outspd').value,
-    duration: t==='video' ? 0 : +document.getElementById('dur').value,
+    duration: +document.getElementById('dur').value,
     maxW:+document.getElementById('mw').value||600,
     maxH:+document.getElementById('mh').value||400,
     volume:+document.getElementById('vol').value,
@@ -1777,11 +1803,9 @@ function updateAccSummaries() {
   const ain = document.getElementById('ain');
   const aout = document.getElementById('aout');
   const inspd = document.getElementById('inspd');
-  const dur = document.getElementById('dur');
   if (ain && aout) {
-    const durEl = document.getElementById('dur-wrap');
-    const durVisible = durEl && durEl.style.display !== 'none';
-    const durStr = durVisible ? ' · ' + (dur ? dur.value+'s' : '5s') : '';
+    const dur = document.getElementById('dur');
+    const durStr = dur ? ' · ' + (dur.value==='0'?'manual':dur.value+'s') : '';
     document.getElementById('acc-anim-summary').textContent =
       ain.value + ' → ' + aout.value + ' · ' + (inspd ? inspd.value+'ms' : '400ms') + durStr;
   }

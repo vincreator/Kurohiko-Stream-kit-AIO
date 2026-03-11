@@ -28,6 +28,7 @@ Ditengah jalan keinget mau nambah WC, Kamar, Pintu, Jendela,etc. Jadinya kyk ya 
 * **🎲 Random Trigger:** Trigger meme acak dari seluruh koleksi — bisa dipakai dari Deck, StreamDeck, URL, atau bot
 * **🔍 Search & Filter:** Cari media by nama/display name, filter by tipe (IMG/VID/AUD), sort 6 mode, badge count per tipe
 * **🏷️ Media Tags:** Beri tag bebas ke setiap media, filter grid by tag, autocomplete dari tag yang sudah dipakai
+* **🕐 Auto-Hide Timer:** Atur durasi tampil per media — image countdown, video/audio force-stop atau biarkan main sampai selesai
 
 ---
 
@@ -68,6 +69,7 @@ Karena folder `node_modules` tidak disertakan di repository ini, ikuti langkah b
 | 🎲 Random Trigger | [docs/random-trigger.md](docs/random-trigger.md) |
 | 🔍 Search & Filter Media Library | [docs/media-library-search.md](docs/media-library-search.md) |
 | 🏷️ Media Tags & Kategori | [docs/media-tags.md](docs/media-tags.md) |
+| 🕐 Auto-Hide Timer per Media | [docs/auto-hide-timer.md](docs/auto-hide-timer.md) |
 
 ---
 

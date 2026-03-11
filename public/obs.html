@@ -187,7 +187,21 @@ function doShow(data){
   if(type==='audio'){
     ma.src=url; ma.volume=vol;
     ma.play().catch(()=>{});
-    mw.style.display='none'; return;
+    mw.style.display='none';
+    // Cleanup saat audio selesai natural
+    ma.onended = () => {
+      hiding=false;
+      if(queued){ const d=queued; queued=null; doShow(d); }
+    };
+    // Force-stop jika dur > 0
+    if(dur > 0){
+      hideTimer = setTimeout(()=>{
+        ma.pause(); ma.src='';
+        hiding=false;
+        if(queued){ const d=queued; queued=null; doShow(d); }
+      }, dur*1000);
+    }
+    return;
   }
 
   if(type==='image'){
@@ -209,6 +223,10 @@ function doShow(data){
       playShow();
     }
     mv.onended=()=>{ if(!hiding) doHide(outAnim, animOutSpeed); };
+    // Force-stop video sebelum selesai jika dur > 0
+    if(dur > 0){
+      hideTimer=setTimeout(()=>{ if(!hiding) doHide(outAnim, animOutSpeed); }, dur*1000);
+    }
     return; // jangan lanjut ke playShow di bawah untuk video (sudah dipanggil di atas)
   }
 
@@ -219,7 +237,7 @@ function doShow(data){
     mw.style.animation=`${IN[animIn]||'fadeIn'} ${animInSpeed}ms cubic-bezier(0.34,1.56,0.64,1) forwards`;
   }
 
-  // Duration timer — only for images (video uses onended)
+  // Duration timer untuk image (video pakai onended + timer force-stop di atas)
   if(type==='image' && dur>0){
     hideTimer=setTimeout(()=>{
       if(!hiding) doHide(outAnim, animOutSpeed);
