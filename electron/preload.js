@@ -9,9 +9,15 @@ contextBridge.exposeInMainWorld('kskElectron', {
 
   // ── GLOBAL SHORTCUT ──
   registerShortcuts: (shortcuts) => ipcRenderer.send('register-shortcuts', shortcuts),
-  onShortcutTriggered: (callback) => ipcRenderer.on('shortcut-triggered', (event, action) => callback(action)),
+  onShortcutTriggered: (callback) => {
+    ipcRenderer.removeAllListeners('shortcut-triggered');
+    ipcRenderer.on('shortcut-triggered', (event, action) => callback(action));
+  },
 
   // ── SHORTCUT TOGGLE SYNC ──
   setShortcutEnabled: (enabled) => ipcRenderer.send('set-shortcut-enabled', enabled),
-  onShortcutStateChanged: (cb) => ipcRenderer.on('shortcut-state-changed', (e, enabled) => cb(enabled)),
+  onShortcutStateChanged: (cb) => {
+    ipcRenderer.removeAllListeners('shortcut-state-changed');
+    ipcRenderer.on('shortcut-state-changed', (e, enabled) => cb(enabled));
+  },
 });
