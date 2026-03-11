@@ -26,6 +26,7 @@ Ditengah jalan keinget mau nambah WC, Kamar, Pintu, Jendela,etc. Jadinya kyk ya 
 * **Chroma Key:** Bisa hapus Greenscreen brooh
 * **Shortcut Keyboard:** Bisa Control pake Shortcut Keyboard (kalau berat, matiin ya)
 * **🎲 Random Trigger:** Trigger meme acak dari seluruh koleksi — bisa dipakai dari Deck, StreamDeck, URL, atau bot
+* **🔍 Search & Filter:** Cari media by nama/display name, filter by tipe (IMG/VID/AUD), sort 6 mode, badge count per tipe
 
 ---
 
@@ -64,6 +65,7 @@ Karena folder `node_modules` tidak disertakan di repository ini, ikuti langkah b
 | Fitur | Docs |
 |-------|------|
 | 🎲 Random Trigger | [docs/random-trigger.md](docs/random-trigger.md) |
+| 🔍 Search & Filter Media Library | [docs/media-library-search.md](docs/media-library-search.md) |
 
 ---
 

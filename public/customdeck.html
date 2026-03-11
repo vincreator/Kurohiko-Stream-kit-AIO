@@ -56,11 +56,17 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:'Syne',sa
 .upzone small{font-size:.56rem;color:var(--tx3);}
 #fi{display:none;}
 .bar{display:flex;gap:6px;align-items:center;padding:8px 10px 0;flex-shrink:0;flex-wrap:wrap;}
-.sbox{flex:1;min-width:80px;background:var(--s2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:var(--rs);font-family:'Syne',sans-serif;font-size:.72rem;outline:none;}
+.sbox-wrap{flex:1;min-width:80px;position:relative;display:flex;align-items:center;}
+.sbox{width:100%;background:var(--s2);border:1px solid var(--bd);color:var(--tx);padding:6px 28px 6px 10px;border-radius:var(--rs);font-family:'Syne',sans-serif;font-size:.72rem;outline:none;}
 .sbox::placeholder{color:var(--tx3);}
-.fb{background:var(--s2);border:1px solid var(--bd);color:var(--tx2);padding:6px 9px;border-radius:var(--rs);font-size:.6rem;font-family:'Syne Mono',monospace;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.sbox-clear{position:absolute;right:7px;background:none;border:none;color:var(--tx3);cursor:pointer;font-size:.75rem;padding:0;line-height:1;display:none;transition:color .15s;}
+.sbox-clear:hover{color:var(--tx);}
+.fb{background:var(--s2);border:1px solid var(--bd);color:var(--tx2);padding:6px 9px;border-radius:var(--rs);font-size:.6rem;font-family:'Syne Mono',monospace;cursor:pointer;transition:all .15s;white-space:nowrap;display:flex;align-items:center;gap:4px;}
 .fb.on,.fb:hover{border-color:var(--ac2);color:var(--ac2);}
 .fb.on{background:rgba(255,170,0,.08);}
+.fb-cnt{font-size:.5rem;background:rgba(255,255,255,.08);border-radius:99px;padding:1px 5px;min-width:14px;text-align:center;}
+.sort-select{background:var(--s2);border:1px solid var(--bd);color:var(--tx2);padding:6px 8px;border-radius:var(--rs);font-size:.6rem;font-family:'Syne Mono',monospace;cursor:pointer;outline:none;}
+.sort-select:hover{border-color:var(--ac2);color:var(--ac2);}
 
 .gwrap{flex:1;overflow-y:auto;padding:8px 10px 10px;min-height:0;}
 .gwrap::-webkit-scrollbar{width:3px;}
@@ -353,11 +359,22 @@ body::after{
       <input type="file" id="fi" multiple accept="image/*,video/*,audio/*" onchange="doUpload(this.files)">
     </div>
     <div class="bar">
-      <input type="text" class="sbox" id="srch" placeholder="Search..." oninput="render()">
-      <button class="fb on" data-t="all" onclick="setF(this)">ALL</button>
-      <button class="fb" data-t="image" onclick="setF(this)">IMG</button>
-      <button class="fb" data-t="video" onclick="setF(this)">VID</button>
-      <button class="fb" data-t="audio" onclick="setF(this)">AUD</button>
+      <div class="sbox-wrap">
+        <input type="text" class="sbox" id="srch" placeholder="Search... (Ctrl+F)" oninput="onSearch()">
+        <button class="sbox-clear" id="srch-clear" onclick="clearSearch()" title="Clear search">✕</button>
+      </div>
+      <button class="fb on" data-t="all"   onclick="setF(this)">ALL   <span class="fb-cnt" id="cnt-all">0</span></button>
+      <button class="fb"    data-t="image" onclick="setF(this)">IMG   <span class="fb-cnt" id="cnt-image">0</span></button>
+      <button class="fb"    data-t="video" onclick="setF(this)">VID   <span class="fb-cnt" id="cnt-video">0</span></button>
+      <button class="fb"    data-t="audio" onclick="setF(this)">AUD   <span class="fb-cnt" id="cnt-audio">0</span></button>
+      <select class="sort-select" id="sort-sel" onchange="render()" title="Sort">
+        <option value="name-asc">A → Z</option>
+        <option value="name-desc">Z → A</option>
+        <option value="date-desc" selected>Terbaru</option>
+        <option value="date-asc">Terlama</option>
+        <option value="size-desc">Terbesar</option>
+        <option value="size-asc">Terkecil</option>
+      </select>
     </div>
     <div class="gwrap">
       <div class="glbl" id="glbl">Loading...</div>
@@ -709,6 +726,7 @@ function getLabel(f){ return (f.settings&&f.settings.displayName)||f.name; }
 
 async function loadFiles(){
   try{ const r=await fetch('/api/media'); files=await r.json(); }catch{ files=[]; }
+  updateCounts();
   render();
 }
 
@@ -718,6 +736,49 @@ function setF(btn){
   btn.classList.add('on'); render();
 }
 
+function onSearch(){
+  const q=document.getElementById('srch').value;
+  document.getElementById('srch-clear').style.display=q?'block':'none';
+  render();
+}
+
+function clearSearch(){
+  document.getElementById('srch').value='';
+  document.getElementById('srch-clear').style.display='none';
+  document.getElementById('srch').focus();
+  render();
+}
+
+// Ctrl+F → fokus ke search input
+document.addEventListener('keydown', e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='f'&&!document.querySelector('.mbk[style*="flex"]')){
+    e.preventDefault();
+    document.getElementById('srch').focus();
+    document.getElementById('srch').select();
+  }
+});
+
+function updateCounts(){
+  const types=['image','video','audio'];
+  const cnts={image:0,video:0,audio:0};
+  files.forEach(f=>{ const t=getType(f.name); if(cnts[t]!==undefined) cnts[t]++; });
+  document.getElementById('cnt-all').textContent=files.length;
+  types.forEach(t=>{ const el=document.getElementById('cnt-'+t); if(el) el.textContent=cnts[t]; });
+}
+
+function applySort(list){
+  const v=(document.getElementById('sort-sel')||{}).value||'date-desc';
+  return [...list].sort((a,b)=>{
+    if(v==='name-asc')  return getLabel(a).localeCompare(getLabel(b));
+    if(v==='name-desc') return getLabel(b).localeCompare(getLabel(a));
+    if(v==='date-asc')  return new Date(a.mtime)-new Date(b.mtime);
+    if(v==='date-desc') return new Date(b.mtime)-new Date(a.mtime);
+    if(v==='size-asc')  return a.size-b.size;
+    if(v==='size-desc') return b.size-a.size;
+    return 0;
+  });
+}
+
 function render(){
   const q=document.getElementById('srch').value.toLowerCase();
   let fs=files.filter(f=>{
@@ -725,7 +786,9 @@ function render(){
     return lbl.includes(q)||f.name.toLowerCase().includes(q);
   });
   if(filt!=='all') fs=fs.filter(f=>getType(f.name)===filt);
-  document.getElementById('glbl').textContent=fs.length+' file'+(fs.length!==1?'s':'');
+  fs=applySort(fs);
+  document.getElementById('glbl').textContent=fs.length+' file'+(fs.length!==1?'s':'')+(q||filt!=='all'?' (filtered)':'');
+  updateCounts();
   const g=document.getElementById('grid');
   if(!fs.length){g.innerHTML='<div class="empty">No files.<br>Upload above!</div>';return;}
   g.innerHTML=fs.map(f=>{
