@@ -64,19 +64,31 @@ app.get('/customdeck', (req, res) => res.sendFile(path.join(APP_PATH, 'public', 
 app.use('/assets', express.static(MEDIA_DIR));
 
 // ── META HELPERS ─────────────────────────────────────────
+let _metaCache = null;
 function loadMeta() {
-  try { return JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch { return {}; }
+  if (_metaCache) return _metaCache;
+  try { _metaCache = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); }
+  catch { _metaCache = {}; }
+  return _metaCache;
 }
 function saveMeta(meta) {
-  try { fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2)); return true; }
-  catch(e) { console.error('saveMeta failed:', e.message); return false; }
+  try {
+    fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+    _metaCache = meta;
+    return true;
+  } catch(e) { console.error('saveMeta failed:', e.message); return false; }
 }
 
 // ── STATS HELPERS ────────────────────────────────────────
+let _statsCache = null;
 function loadStatsData() {
-  try { return JSON.parse(fs.readFileSync(STATS_FILE, 'utf8')); } catch { return { totalTriggers: 0 }; }
+  if (_statsCache) return _statsCache;
+  try { _statsCache = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8')); }
+  catch { _statsCache = { totalTriggers: 0 }; }
+  return _statsCache;
 }
 function saveStatsData(data) {
+  _statsCache = data;
   try { fs.writeFileSync(STATS_FILE, JSON.stringify(data)); } catch(e) { console.error(e); }
 }
 function incrementTrigger() {
@@ -187,10 +199,15 @@ app.post('/hide', (req, res) => { io.emit('hide-media'); res.json({ ok: true });
 app.get('/hide',  (req, res) => { io.emit('hide-media'); res.json({ ok: true }); });
 
 // ── COUNTER API ──────────────────────────────────────────
+let _counterCache = null;
 function loadCounterMeta() {
-  try { return JSON.parse(fs.readFileSync(COUNTER_META, 'utf8')); } catch { return []; }
+  if (_counterCache) return _counterCache;
+  try { _counterCache = JSON.parse(fs.readFileSync(COUNTER_META, 'utf8')); }
+  catch { _counterCache = []; }
+  return _counterCache;
 }
 function saveCounterMeta(list) {
+  _counterCache = list;
   try { fs.writeFileSync(COUNTER_META, JSON.stringify(list, null, 2)); return true; } catch { return false; }
 }
 
