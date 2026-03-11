@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const multer = require('multer');
 const { execFile, execFileSync } = require('child_process');
 
@@ -22,10 +23,11 @@ const MEDIA_DIR  = process.env.ASSETS_DIR_OVERRIDE || process.env.MEDIA_DIR || p
 const META_FILE  = path.join(BASE_DIR, 'meta.json');
 const THUMB_DIR  = path.join(BASE_DIR, 'thumbs');
 const TEXT_DIR   = path.join(MEDIA_DIR, 'text');
-const COUNTER_META      = path.join(BASE_DIR, 'counters.json');
+const COUNTER_META       = path.join(BASE_DIR, 'counters.json');
 const DECK_SETTINGS_FILE = path.join(BASE_DIR, 'deck_settings.json');
-const STATS_FILE        = path.join(BASE_DIR, 'stats.json');
-const PORT              = process.env.PORT || 3000;
+const STATS_FILE         = path.join(BASE_DIR, 'stats.json');
+const CONFIG_FILE        = path.join(BASE_DIR, 'config.json');
+const PORT               = process.env.PORT || 3000;
 
 // Bikin folder kalau belum ada
 [MEDIA_DIR, THUMB_DIR, TEXT_DIR].forEach(d => {
@@ -271,7 +273,6 @@ app.post('/api/deck-settings', (req, res) => {
 });
 
 // ── LOCAL IP (untuk QR / phone connect) ─────────────────
-const os = require('os');
 app.get('/api/local-ip', (req, res) => {
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
@@ -285,7 +286,6 @@ app.get('/api/local-ip', (req, res) => {
 });
 
 // ── CONFIG API ──────────────────────────────────────────
-const CONFIG_FILE = path.join(BASE_DIR, 'config.json');
 function loadAppConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
 }
