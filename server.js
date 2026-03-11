@@ -6,6 +6,8 @@ const fs = require('fs');
 const os = require('os');
 const multer = require('multer');
 const { execFile, execFileSync } = require('child_process');
+const archiver = require('archiver');
+const unzipper = require('unzipper');
 
 const app = express();
 const server = http.createServer(app);
@@ -300,11 +302,7 @@ app.post('/api/choose-folder', async (req, res) => {
 });
 
 // ── BACKUP & RESTORE ────────────────────────────────────
-const archiver = (() => { try { return require('archiver'); } catch { return null; } })();
-const unzipper = (() => { try { return require('unzipper'); } catch { return null; } })();
-
 app.get('/api/backup', (req, res) => {
-  if (!archiver) return res.status(500).json({ ok: false, error: 'archiver not installed. Run: npm install archiver' });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = 'KSK-Backup-' + timestamp + '.zip';
@@ -338,7 +336,6 @@ app.get('/api/backup', (req, res) => {
 
 const restoreUpload = multer({ dest: path.join(BASE_DIR, '_restore_tmp'), limits: { fileSize: 2 * 1024 * 1024 * 1024 } });
 app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
-  if (!unzipper) return res.status(500).json({ ok: false, error: 'unzipper not installed. Run: npm install unzipper' });
   if (!req.file) return res.status(400).json({ ok: false, error: 'No file uploaded' });
 
   const zipPath = req.file.path;
