@@ -54,12 +54,12 @@ console.log(`[paths] mode=${IS_ELECTRON ? 'electron' : 'standalone'}`);
 // Limit 50mb untuk support upload JSON besar (misal deck settings dengan banyak tombol)
 app.use(express.json({ limit: '50mb' }));
 
-// APP_PATH = lokasi file statis (HTML, JS, lang)
-// Di dev: __dirname (folder project)
-// Di packaged Electron: di dalam app.asar (tidak perlu unpack karena hanya dibaca, tidak dieksekusi)
-const IS_PACKAGED = IS_ELECTRON && process.resourcesPath && !process.resourcesPath.includes('node_modules');
+// IS_PACKAGED: deteksi apakah berjalan dalam Electron packaged build.
+// process.resourcesPath adalah property Electron — TIDAK tersedia di child process fork.
+// Karena itu main.js meneruskannya via env var RESOURCES_PATH.
+const IS_PACKAGED = IS_ELECTRON && !!process.env.RESOURCES_PATH;
 const APP_PATH = IS_PACKAGED
-  ? path.join(process.resourcesPath, 'app.asar')
+  ? path.join(process.env.RESOURCES_PATH, 'app.asar')
   : __dirname;
 
 app.use(express.static(path.join(APP_PATH, 'public')));

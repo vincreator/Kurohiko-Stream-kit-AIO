@@ -92,6 +92,9 @@ function startServer() {
       USER_DATA_DIR: USER_DATA,
       ASSETS_DIR_OVERRIDE: assetsDir,
       ELECTRON: '1',
+      // Dikirim eksplisit karena process.resourcesPath adalah property Electron,
+      // bukan env var — child process fork Node.js biasa tidak punya property ini.
+      RESOURCES_PATH: process.resourcesPath || '',
     },
     silent: true,
   });
@@ -298,8 +301,10 @@ app.on('second-instance', () => {
 
 // ── APP EVENTS ───────────────────────────────────────────
 app.whenReady().then(() => { startServer(); createWindow(); createTray(); });
-// Cegah Electron quit saat semua window ditutup (minimize ke tray)
-app.on('window-all-closed', e => e.preventDefault());
+// Cegah Electron quit saat semua window ditutup (minimize ke tray).
+// Electron TIDAK mengirim argumen ke event ini — cukup subscribe (tanpa e.preventDefault())
+// sudah mencegah default quit behavior.
+app.on('window-all-closed', () => {});
 // Sebelum quit: kill server process dan tutup log stream
 app.on('before-quit', () => { if (serverProcess) serverProcess.kill(); logStream.end(); });
 // Unregister semua shortcut saat app benar-benar keluar
