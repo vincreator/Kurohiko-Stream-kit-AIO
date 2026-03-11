@@ -25,6 +25,7 @@ const TEXT_DIR   = path.join(MEDIA_DIR, 'text');
 const COUNTER_META      = path.join(BASE_DIR, 'counters.json');
 const DECK_SETTINGS_FILE = path.join(BASE_DIR, 'deck_settings.json');
 const STATS_FILE        = path.join(BASE_DIR, 'stats.json');
+const PORT              = process.env.PORT || 3000;
 
 // Bikin folder kalau belum ada
 [MEDIA_DIR, THUMB_DIR, TEXT_DIR].forEach(d => {
@@ -392,7 +393,6 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
 io.on('connection', s => console.log('Client connected:', s.id));
 
 // ── START ────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`KSK Server | port:${PORT} | media:${MEDIA_DIR} | ffmpeg:${hasFfmpeg}`);
 });
