@@ -29,7 +29,7 @@ const COUNTER_META       = path.join(BASE_DIR, 'counters.json');
 const DECK_SETTINGS_FILE = path.join(BASE_DIR, 'deck_settings.json');
 const STATS_FILE         = path.join(BASE_DIR, 'stats.json');
 const CONFIG_FILE        = path.join(BASE_DIR, 'config.json');
-const PORT               = process.env.PORT || 3000;
+const PORT               = parseInt(process.env.PORT || '3000', 10);
 
 // Bikin folder kalau belum ada
 [MEDIA_DIR, THUMB_DIR, TEXT_DIR].forEach(d => {
@@ -143,7 +143,7 @@ app.post('/upload', upload.any(), (req, res) => {
 });
 
 app.post('/api/media/:filename/settings', (req, res) => {
-  const filename = decodeURIComponent(req.params.filename);
+  const filename = path.basename(decodeURIComponent(req.params.filename));
   const meta = loadMeta();
   meta[filename] = req.body;
   res.json({ ok: saveMeta(meta) });
@@ -151,7 +151,7 @@ app.post('/api/media/:filename/settings', (req, res) => {
 
 app.delete('/api/media/:filename', (req, res) => {
   try {
-    const filename = decodeURIComponent(req.params.filename);
+    const filename = path.basename(decodeURIComponent(req.params.filename));
     const fp = path.join(MEDIA_DIR, filename);
     if (fs.existsSync(fp)) fs.unlinkSync(fp);
     const tp = path.join(THUMB_DIR, filename + '.jpg');
@@ -165,7 +165,7 @@ app.delete('/api/media/:filename', (req, res) => {
 
 // ── THUMBNAIL ────────────────────────────────────────────
 app.get('/api/thumb/:filename', (req, res) => {
-  const filename = decodeURIComponent(req.params.filename);
+  const filename = path.basename(decodeURIComponent(req.params.filename));
   const videoPath = path.join(MEDIA_DIR, filename);
   const thumbPath = path.join(THUMB_DIR, filename + '.jpg');
 
@@ -190,7 +190,7 @@ app.post('/trigger', (req, res) => {
 });
 app.get('/trigger/:filename', (req, res) => {
   incrementTrigger();
-  const filename = decodeURIComponent(req.params.filename);
+  const filename = path.basename(decodeURIComponent(req.params.filename));
   const meta = loadMeta();
   io.emit('show-media', { filename, ...(meta[filename] || {}) });
   res.json({ ok: true });
@@ -322,7 +322,6 @@ app.get('/api/config', (req, res) => res.json(loadAppConfig()));
 
 // ── BACKUP & RESTORE ────────────────────────────────────
 app.get('/api/backup', (req, res) => {
-
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = 'KSK-Backup-' + timestamp + '.zip';
 
@@ -395,13 +394,14 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
     }
 
     try { fs.unlinkSync(zipPath); } catch {}
-    try { fs.rmdirSync(path.join(BASE_DIR, '_restore_tmp')); } catch {}
+    try { fs.rmSync(path.join(BASE_DIR, '_restore_tmp'), { recursive: true, force: true }); } catch {}
 
     // Invalidate in-memory caches so next request re-reads from restored disk files
     _metaCache = null;
     _counterCache = null;
     _statsCache = null;
     _deckSettingsCache = null;
+    _appConfigCache = null;
 
     res.json({ ok: true, restoredFiles, restoredConfigs });
   } catch(e) {

@@ -16,7 +16,7 @@ const TEXT_DIR   = path.join(USER_DATA, 'assets', 'text');
 const LOG_FILE   = path.join(USER_DATA, 'app.log');
 const CONFIG_FILE = path.join(USER_DATA, 'config.json');
 
-[ASSETS_DIR, THUMBS_DIR, TEXT_DIR].forEach(d => {
+[ASSETS_DIR, TEXT_DIR].forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
@@ -227,12 +227,9 @@ function toggleShortcutsFromTray() {
   log(`Shortcut toggled from tray: ${shortcutsEnabled}`);
 }
 
-
 // ── GLOBAL SHORTCUT ──────────────────────────────────────
 ipcMain.on('register-shortcuts', (event, shortcuts) => {
-  // Hapus yang lama biar ga dobel/bentrok
   globalShortcut.unregisterAll();
-  
   if (!shortcuts || !Array.isArray(shortcuts)) return;
 
   shortcuts.forEach(sc => {
