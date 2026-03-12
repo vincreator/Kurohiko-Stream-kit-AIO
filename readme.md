@@ -29,6 +29,7 @@ Ditengah jalan keinget mau nambah WC, Kamar, Pintu, Jendela,etc. Jadinya kyk ya 
 * **🔍 Search & Filter:** Cari media by nama/display name, filter by tipe (IMG/VID/AUD), sort 6 mode, badge count per tipe
 * **🏷️ Media Tags:** Beri tag bebas ke setiap media, filter grid by tag, autocomplete dari tag yang sudah dipakai
 * **🕐 Auto-Hide Timer:** Atur durasi tampil per media — image countdown, video/audio force-stop atau biarkan main sampai selesai
+* **🔔 Donation Alert:** Webhook Saweria & Trakteer — alert otomatis tampil di OBS saat donasi masuk, lengkap dengan nama, jumlah, dan pesan
 
 ---
 
@@ -70,6 +71,7 @@ Karena folder `node_modules` tidak disertakan di repository ini, ikuti langkah b
 | 🔍 Search & Filter Media Library | [docs/media-library-search.md](docs/media-library-search.md) |
 | 🏷️ Media Tags & Kategori | [docs/media-tags.md](docs/media-tags.md) |
 | 🕐 Auto-Hide Timer per Media | [docs/auto-hide-timer.md](docs/auto-hide-timer.md) |
+| 🔔 Donation Alert (Saweria & Trakteer) | [docs/donation-alert.md](docs/donation-alert.md) |
 
 ---
 

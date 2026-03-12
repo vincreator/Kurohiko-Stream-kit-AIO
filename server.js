@@ -39,6 +39,8 @@ const COUNTER_META       = path.join(BASE_DIR, 'counters.json');       // daftar
 const DECK_SETTINGS_FILE = path.join(BASE_DIR, 'deck_settings.json'); // layout & tombol custom deck
 const STATS_FILE         = path.join(BASE_DIR, 'stats.json');          // statistik trigger
 const CONFIG_FILE        = path.join(BASE_DIR, 'config.json');         // config app (folder assets, dll)
+const DONATION_CONFIG_FILE = path.join(BASE_DIR, 'donation_config.json'); // config donation alert
+const DONATIONS_FILE       = path.join(BASE_DIR, 'donations.json');       // riwayat 50 donasi terakhir
 const PORT               = parseInt(process.env.PORT || '3000', 10);
 
 // Bikin folder kalau belum ada
@@ -270,6 +272,100 @@ app.get('/trigger/:filename', (req, res) => {
 // GET/POST /hide — sembunyikan media yang sedang tampil di OBS overlay
 app.all('/hide', (req, res) => { io.emit('hide-media'); res.json({ ok: true }); });
 
+// ── DONATION ALERT ───────────────────────────────────────
+// Webhook endpoint untuk Saweria & Trakteer.
+// Token verifikasi opsional — jika diisi di config, request harus menyertakan ?token=xxx.
+// Riwayat 50 donasi terakhir disimpan ke donations.json.
+
+let _donationConfigCache = null;
+function loadDonationConfig() {
+  if (_donationConfigCache) return _donationConfigCache;
+  try { _donationConfigCache = JSON.parse(fs.readFileSync(DONATION_CONFIG_FILE, 'utf8')); }
+  catch { _donationConfigCache = { saweria_token: '', trakteer_token: '', alert_duration: 8, media_on_donation: '' }; }
+  return _donationConfigCache;
+}
+function saveDonationConfig(cfg) {
+  _donationConfigCache = cfg;
+  try { fs.writeFileSync(DONATION_CONFIG_FILE, JSON.stringify(cfg, null, 2)); return true; }
+  catch(e) { console.error('saveDonationConfig:', e.message); return false; }
+}
+function addDonationHistory(entry) {
+  let history = [];
+  try { history = JSON.parse(fs.readFileSync(DONATIONS_FILE, 'utf8')); } catch {}
+  history.unshift(entry); // terbaru di depan
+  if (history.length > 50) history = history.slice(0, 50);
+  try { fs.writeFileSync(DONATIONS_FILE, JSON.stringify(history, null, 2)); } catch(e) { console.error(e); }
+}
+
+app.get('/api/donation-config', (req, res) => res.json(loadDonationConfig()));
+app.post('/api/donation-config', (req, res) => {
+  const ok = saveDonationConfig({ ...loadDonationConfig(), ...req.body });
+  res.json({ ok });
+});
+
+// GET /api/donations — riwayat donasi (max 50)
+app.get('/api/donations', (req, res) => {
+  try { res.json(JSON.parse(fs.readFileSync(DONATIONS_FILE, 'utf8'))); }
+  catch { res.json([]); }
+});
+
+// POST /webhook/saweria
+// Payload Saweria: { donor_name, amount_raw (atau amount), message, id, created_at }
+// Untuk verifikasi: tambahkan ?token=xxx di URL webhook yang didaftarkan ke Saweria
+app.post('/webhook/saweria', (req, res) => {
+  const cfg = loadDonationConfig();
+  if (cfg.saweria_token && req.query.token !== cfg.saweria_token) {
+    return res.status(401).json({ ok: false, error: 'Invalid token' });
+  }
+  const body = req.body || {};
+  const entry = {
+    platform: 'saweria',
+    name:    body.donator_name || body.donor_name || 'Anonymous',
+    amount:  Number(body.amount_raw || body.amount || 0),
+    message: body.message || '',
+    timestamp: new Date().toISOString()
+  };
+  addDonationHistory(entry);
+  io.emit('donation-alert', { ...entry, duration: Number(cfg.alert_duration) || 8 });
+  // Opsional: trigger media saat ada donasi
+  if (cfg.media_on_donation) {
+    const meta = loadMeta();
+    incrementTrigger();
+    io.emit('show-media', { filename: cfg.media_on_donation, ...(meta[cfg.media_on_donation] || {}) });
+  }
+  res.json({ ok: true });
+});
+
+// POST /webhook/trakteer
+// Payload Trakteer: { supporter_name, supporter_message, price_amount, quantity, total, unit_name }
+// Untuk verifikasi: tambahkan ?token=xxx di URL webhook yang didaftarkan ke Trakteer
+app.post('/webhook/trakteer', (req, res) => {
+  const cfg = loadDonationConfig();
+  if (cfg.trakteer_token && req.query.token !== cfg.trakteer_token) {
+    return res.status(401).json({ ok: false, error: 'Invalid token' });
+  }
+  const body = req.body || {};
+  const qty  = Number(body.quantity) || 1;
+  const rawTotal = body.total != null ? Number(body.total) : Number(body.price_amount || 0) * qty;
+  const entry = {
+    platform: 'trakteer',
+    name:     body.supporter_name || 'Anonymous',
+    amount:   rawTotal,
+    message:  body.supporter_message || '',
+    unit:     body.unit_name || '',
+    quantity: qty,
+    timestamp: new Date().toISOString()
+  };
+  addDonationHistory(entry);
+  io.emit('donation-alert', { ...entry, duration: Number(cfg.alert_duration) || 8 });
+  if (cfg.media_on_donation) {
+    const meta = loadMeta();
+    incrementTrigger();
+    io.emit('show-media', { filename: cfg.media_on_donation, ...(meta[cfg.media_on_donation] || {}) });
+  }
+  res.json({ ok: true });
+});
+
 // ── COUNTER API ──────────────────────────────────────────
 // Counter = file .txt di TEXT_DIR yang dibaca OBS sebagai Text Source
 // Pola cache sama dengan meta: read-through / write-through
@@ -488,6 +584,7 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
     _statsCache = null;
     _deckSettingsCache = undefined; // undefined agar loadDeckSettings re-read dari disk
     _appConfigCache = null;
+    _donationConfigCache = null;
 
     res.json({ ok: true, restoredFiles, restoredConfigs });
   } catch(e) {

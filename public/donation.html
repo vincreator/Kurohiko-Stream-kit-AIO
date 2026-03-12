@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>KSK Donation Alert</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:transparent;overflow:hidden;}
+
+/* Stage 1920×1080, di-scale ke viewport OBS — sama seperti obs.html */
+#stage{
+  position:fixed;top:0;left:0;
+  width:1920px;height:1080px;
+  transform-origin:top left;
+  pointer-events:none;
+}
+
+/* Alert card ditempatkan di bawah-tengah */
+#alert-wrap{
+  position:absolute;
+  bottom:72px;
+  left:50%;
+  transform:translateX(-50%);
+  width:540px;
+}
+
+.alert-card{
+  background:rgba(8,8,14,.95);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:18px;
+  overflow:hidden;
+  box-shadow:0 28px 90px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.04);
+  display:none;
+}
+
+/* Header: badge platform + jumlah donasi */
+.a-header{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:17px 22px 15px;
+}
+.a-badge{
+  font-size:.63rem;
+  font-weight:800;
+  letter-spacing:1.2px;
+  padding:5px 12px;
+  border-radius:7px;
+  font-family:'JetBrains Mono',monospace;
+  white-space:nowrap;
+}
+.a-hearts{
+  font-size:.9rem;
+  opacity:.6;
+}
+.a-amount{
+  margin-left:auto;
+  font-size:1.2rem;
+  font-weight:900;
+  color:#fff;
+  font-family:'JetBrains Mono',monospace;
+  letter-spacing:-0.5px;
+}
+
+.a-sep{height:1px;background:rgba(255,255,255,.07);}
+
+/* Body: nama donatur + pesan */
+.a-body{padding:14px 22px 18px;}
+.a-name{
+  font-size:1rem;
+  font-weight:800;
+  color:#fff;
+  display:flex;align-items:center;gap:7px;
+}
+.a-msg{
+  font-size:.83rem;
+  color:rgba(255,255,255,.55);
+  font-style:italic;
+  line-height:1.55;
+  margin-top:7px;
+  display:none;
+}
+
+/* Progress bar countdown */
+.a-prog{height:4px;background:rgba(255,255,255,.07);}
+.a-prog-fill{height:100%;width:100%;}
+
+@keyframes alertIn{
+  from{opacity:0;transform:translateY(44px) scale(0.91);}
+  to  {opacity:1;transform:translateY(0)    scale(1);}
+}
+@keyframes alertOut{
+  from{opacity:1;transform:translateY(0)     scale(1);}
+  to  {opacity:0;transform:translateY(-16px) scale(0.93);}
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="alert-wrap">
+    <div class="alert-card" id="alert-card">
+      <div class="a-header">
+        <div class="a-badge"  id="a-badge"></div>
+        <div class="a-hearts" id="a-hearts"></div>
+        <div class="a-amount" id="a-amount"></div>
+      </div>
+      <div class="a-sep"></div>
+      <div class="a-body">
+        <div class="a-name" id="a-name"></div>
+        <div class="a-msg"  id="a-msg"></div>
+      </div>
+      <div class="a-prog"><div class="a-prog-fill" id="a-prog-fill"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ── Scale 1920×1080 stage ke viewport OBS (sama dengan obs.html) ─────────
+function scaleStage(){
+  const s  = document.getElementById('stage');
+  const sx = window.innerWidth  / 1920;
+  const sy = window.innerHeight / 1080;
+  const sc = Math.min(sx, sy);
+  s.style.transform = 'scale(' + sc + ')';
+  s.style.left = ((window.innerWidth  - 1920 * sc) / 2) + 'px';
+  s.style.top  = ((window.innerHeight - 1080 * sc) / 2) + 'px';
+}
+scaleStage();
+window.addEventListener('resize', scaleStage);
+
+// ── Konfigurasi platform ─────────────────────────────────────────────────
+const PLATFORM_COLOR = { saweria: '#f5a623', trakteer: '#e53935' };
+const PLATFORM_ICON  = { saweria: '☕', trakteer: '❤️' };
+const PLATFORM_LABEL = { saweria: 'SAWERIA', trakteer: 'TRAKTEER' };
+
+// ── Queue system (tampil satu per satu) ──────────────────────────────────
+const socket = io();
+let queue = [], busy = false;
+
+socket.on('donation-alert', data => {
+  queue.push(data);
+  if (!busy) next();
+});
+
+function next() {
+  if (!queue.length) { busy = false; return; }
+  busy = true;
+  show(queue.shift());
+}
+
+// ── Tampilkan satu alert ─────────────────────────────────────────────────
+function show(d) {
+  const { platform = 'saweria', name = 'Anonymous', amount = 0, message = '', duration = 8 } = d;
+
+  const color = PLATFORM_COLOR[platform] || '#38bdf8';
+  const icon  = PLATFORM_ICON[platform]  || '💰';
+  const label = PLATFORM_LABEL[platform] || platform.toUpperCase();
+  const amtFmt = 'Rp ' + Number(amount).toLocaleString('id-ID');
+
+  // Platform badge
+  const badge = document.getElementById('a-badge');
+  badge.textContent = icon + ' ' + label;
+  badge.style.background = color + '22';
+  badge.style.border      = '1px solid ' + color + '55';
+  badge.style.color       = color;
+
+  // Jumlah donasi
+  document.getElementById('a-amount').textContent = amtFmt;
+
+  // Nama donatur
+  document.getElementById('a-name').textContent = '❤️  ' + name;
+
+  // Pesan (opsional)
+  const msgEl = document.getElementById('a-msg');
+  if (message) {
+    msgEl.textContent = '"' + message + '"';
+    msgEl.style.display = 'block';
+  } else {
+    msgEl.style.display = 'none';
+  }
+
+  // Hearts dekorasi
+  document.getElementById('a-hearts').textContent = '♥♥♥';
+
+  // Reset progress bar (tanpa transisi dulu)
+  const prog = document.getElementById('a-prog-fill');
+  prog.style.transition = 'none';
+  prog.style.width      = '100%';
+  prog.style.background = color;
+
+  // Tampilkan card dengan animasi masuk (void offsetWidth = forced reflow agar animasi restart)
+  const card = document.getElementById('alert-card');
+  card.style.animation = '';
+  card.style.display   = 'block';
+  void card.offsetWidth; // paksa browser flush style sebelum set animasi baru
+  card.style.animation = 'alertIn .55s cubic-bezier(0.34,1.56,0.64,1) forwards';
+
+  // Mulai countdown progress bar (2 rAF agar reset width ter-apply dulu)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      prog.style.transition = 'width ' + duration + 's linear';
+      prog.style.width      = '0%';
+    });
+  });
+
+  // Setelah durasi: animasi keluar, lanjut ke queue berikutnya
+  setTimeout(() => {
+    card.style.animation = 'alertOut .42s ease forwards';
+    setTimeout(() => {
+      card.style.display   = 'none';
+      card.style.animation = '';
+      next();
+    }, 440);
+  }, duration * 1000);
+}
+</script>
+</body>
+</html>

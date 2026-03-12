@@ -250,6 +250,12 @@ body::after{
         <div class="mc-desc">Rekomendasi plugin OBS terbaik untuk streamer.</div>
         <div class="mc-arrow">→ LIHAT</div>
       </a>
+      <a href="#" class="menu-card" onclick="openDonationSetup();return false;">
+        <div class="mc-ic">🔔</div>
+        <div class="mc-title">Donation Alert</div>
+        <div class="mc-desc">Webhook Saweria & Trakteer. Alert otomatis tampil di OBS saat ada donasi.</div>
+        <div class="mc-arrow">→ SETUP</div>
+      </a>
     </div>
 
     <!-- Active Counters List (dipindah dari old More Tools) -->
@@ -298,6 +304,81 @@ body::after{
       </a>
     </div>
     <button onclick="closeFeedback()" style="width:100%;margin-top:14px;background:var(--panel2);border:1px solid var(--bd2);color:var(--tx2);padding:10px;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;">Tutup</button>
+  </div>
+</div>
+
+<!-- DONATION ALERT MODAL -->
+<div class="modal-bg" id="donation-modal">
+  <div class="modal-box" style="max-width:440px;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;position:sticky;top:0;background:var(--panel);z-index:1;padding-bottom:12px;border-bottom:1px solid var(--bd);">
+      <div style="font-size:.9rem;font-weight:800;">🔔 Donation Alert Setup</div>
+      <button onclick="closeDonationSetup()" style="background:none;border:1px solid var(--bd2);color:var(--tx2);width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:.8rem;">✕</button>
+    </div>
+
+    <!-- SAWERIA -->
+    <div style="background:var(--panel2);border:1px solid rgba(245,166,35,.2);border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:1rem;">☕</span>
+        <div style="font-size:.72rem;font-weight:800;color:#f5a623;">SAWERIA</div>
+      </div>
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:5px;">Webhook URL</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <div id="saweria-url" class="mono" style="flex:1;background:var(--panel);border:1px solid var(--bd2);border-radius:6px;padding:7px 10px;font-size:.6rem;color:#f5a623;word-break:break-all;">—</div>
+        <button onclick="copyDonationUrl('saweria')" style="flex-shrink:0;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.3);color:#f5a623;padding:6px 10px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;">Copy</button>
+      </div>
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:5px;">Secret Token <span style="color:var(--tx3);font-weight:400;text-transform:none;letter-spacing:0;">(opsional — untuk verifikasi request)</span></div>
+      <input type="text" id="saweria-token" placeholder="Kosongkan jika tidak ingin verifikasi" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;font-family:'JetBrains Mono',monospace;outline:none;">
+    </div>
+
+    <!-- TRAKTEER -->
+    <div style="background:var(--panel2);border:1px solid rgba(229,57,53,.2);border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:1rem;">❤️</span>
+        <div style="font-size:.72rem;font-weight:800;color:#e53935;">TRAKTEER</div>
+      </div>
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:5px;">Webhook URL</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <div id="trakteer-url" class="mono" style="flex:1;background:var(--panel);border:1px solid var(--bd2);border-radius:6px;padding:7px 10px;font-size:.6rem;color:#e53935;word-break:break-all;">—</div>
+        <button onclick="copyDonationUrl('trakteer')" style="flex-shrink:0;background:rgba(229,57,53,.1);border:1px solid rgba(229,57,53,.3);color:#e53935;padding:6px 10px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;">Copy</button>
+      </div>
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:5px;">Secret Token <span style="color:var(--tx3);font-weight:400;text-transform:none;letter-spacing:0;">(opsional)</span></div>
+      <input type="text" id="trakteer-token" placeholder="Kosongkan jika tidak ingin verifikasi" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;font-family:'JetBrains Mono',monospace;outline:none;">
+    </div>
+
+    <!-- OBS OVERLAY -->
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:5px;">OBS Browser Source URL</div>
+      <div style="display:flex;gap:6px;">
+        <div id="donation-overlay-url" class="mono" style="flex:1;background:var(--panel);border:1px solid var(--bd2);border-radius:6px;padding:7px 10px;font-size:.6rem;color:var(--ac);word-break:break-all;">—</div>
+        <button onclick="copyDonationUrl('overlay')" style="flex-shrink:0;background:var(--ac-dim);border:1px solid rgba(56,189,248,.3);color:var(--ac);padding:6px 10px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;">Copy</button>
+      </div>
+      <div style="font-size:.55rem;color:var(--tx3);margin-top:6px;">Tambahkan sebagai Browser Source di OBS — 1920×1080, transparent background.</div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:10px;">Pengaturan Alert</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="font-size:.68rem;font-weight:600;">Durasi tampil</div>
+        <span id="donation-dur-val" style="font-size:.68rem;color:var(--ac);font-weight:700;">8s</span>
+      </div>
+      <input type="range" id="donation-dur" min="3" max="30" value="8" step="1"
+        oninput="document.getElementById('donation-dur-val').textContent=this.value+'s'"
+        style="width:100%;accent-color:var(--ac);margin-bottom:12px;">
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:5px;">Sound FX saat donasi <span style="color:var(--tx3);font-weight:400;text-transform:none;letter-spacing:0;">(nama file, opsional)</span></div>
+      <input type="text" id="donation-media" placeholder="contoh: kaching.mp3 — kosong = tidak ada" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;font-family:'JetBrains Mono',monospace;outline:none;">
+      <div style="font-size:.55rem;color:var(--tx3);margin-top:5px;">File harus ada di Media Library. Akan di-trigger ke OBS saat webhook diterima.</div>
+    </div>
+
+    <button onclick="saveDonationSetup()" id="donation-save-btn" style="width:100%;background:var(--ac);border:none;color:#000;padding:10px;border-radius:8px;font-size:.75rem;font-weight:800;cursor:pointer;margin-bottom:12px;">💾 Simpan</button>
+
+    <!-- RECENT DONATIONS -->
+    <div style="font-size:.56rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tx2);margin-bottom:8px;">Donasi Terbaru</div>
+    <div id="donation-list" style="display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;">
+      <div style="font-size:.65rem;color:var(--tx3);text-align:center;padding:12px;">Belum ada donasi yang diterima.</div>
+    </div>
+
+    <button onclick="closeDonationSetup()" style="width:100%;margin-top:12px;background:var(--panel2);border:1px solid var(--bd2);color:var(--tx2);padding:10px;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;">Tutup</button>
   </div>
 </div>
 
@@ -908,6 +989,120 @@ function initScToggle() {
 
 
 function openBestPlugins() { toast('Coming soon — Best OBS Plugins'); }
+
+// ─── DONATION ALERT SETUP ──────────────────────────────────
+let _donationBaseUrl = '';
+
+async function openDonationSetup() {
+  document.getElementById('donation-modal').classList.add('open');
+  // Ambil IP lokal untuk generate webhook URLs
+  try {
+    const r = await fetch('/api/local-ip');
+    const { ip, port } = await r.json();
+    _donationBaseUrl = 'http://' + ip + ':' + port;
+  } catch {
+    _donationBaseUrl = window.location.origin;
+  }
+  document.getElementById('saweria-url').textContent     = _donationBaseUrl + '/webhook/saweria';
+  document.getElementById('trakteer-url').textContent    = _donationBaseUrl + '/webhook/trakteer';
+  document.getElementById('donation-overlay-url').textContent = _donationBaseUrl + '/donation.html';
+  // Load config
+  try {
+    const r = await fetch('/api/donation-config');
+    const cfg = await r.json();
+    document.getElementById('saweria-token').value  = cfg.saweria_token  || '';
+    document.getElementById('trakteer-token').value = cfg.trakteer_token || '';
+    const dur = Number(cfg.alert_duration) || 8;
+    document.getElementById('donation-dur').value = dur;
+    document.getElementById('donation-dur-val').textContent = dur + 's';
+    document.getElementById('donation-media').value = cfg.media_on_donation || '';
+    // Rebuild URLs dengan token jika sudah tersimpan
+    const sawTok = cfg.saweria_token  ? '?token=' + encodeURIComponent(cfg.saweria_token)  : '';
+    const trkTok = cfg.trakteer_token ? '?token=' + encodeURIComponent(cfg.trakteer_token) : '';
+    document.getElementById('saweria-url').textContent  = _donationBaseUrl + '/webhook/saweria'  + sawTok;
+    document.getElementById('trakteer-url').textContent = _donationBaseUrl + '/webhook/trakteer' + trkTok;
+  } catch {}
+  loadRecentDonations();
+}
+
+function closeDonationSetup() {
+  document.getElementById('donation-modal').classList.remove('open');
+}
+document.getElementById('donation-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('donation-modal')) closeDonationSetup();
+});
+
+async function saveDonationSetup() {
+  const btn = document.getElementById('donation-save-btn');
+  btn.disabled = true; btn.textContent = '...';
+  const sawToken = document.getElementById('saweria-token').value.trim();
+  const trkToken = document.getElementById('trakteer-token').value.trim();
+  // Jika token diisi, update URL yang ditampilkan agar sudah include ?token=
+  const sawUrl = _donationBaseUrl + '/webhook/saweria' + (sawToken ? '?token=' + encodeURIComponent(sawToken) : '');
+  const trkUrl = _donationBaseUrl + '/webhook/trakteer' + (trkToken ? '?token=' + encodeURIComponent(trkToken) : '');
+  document.getElementById('saweria-url').textContent  = sawUrl;
+  document.getElementById('trakteer-url').textContent = trkUrl;
+  try {
+    await fetch('/api/donation-config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        saweria_token:    sawToken,
+        trakteer_token:   trkToken,
+        alert_duration:   Number(document.getElementById('donation-dur').value),
+        media_on_donation: document.getElementById('donation-media').value.trim()
+      })
+    });
+    toast('✅ Donation Alert config disimpan!');
+  } catch(e) { toast('Gagal simpan: ' + e.message); }
+  btn.disabled = false; btn.textContent = '💾 Simpan';
+}
+
+function copyDonationUrl(platform) {
+  let url = '';
+  if (platform === 'saweria')  url = document.getElementById('saweria-url').textContent;
+  if (platform === 'trakteer') url = document.getElementById('trakteer-url').textContent;
+  if (platform === 'overlay')  url = document.getElementById('donation-overlay-url').textContent;
+  cp(url);
+}
+
+async function loadRecentDonations() {
+  const el = document.getElementById('donation-list');
+  try {
+    const r = await fetch('/api/donations');
+    const list = await r.json();
+    if (!list.length) {
+      el.innerHTML = '<div style="font-size:.65rem;color:var(--tx3);text-align:center;padding:12px;">Belum ada donasi yang diterima.</div>';
+      return;
+    }
+    const fmtTime = iso => {
+      const d = new Date(iso), now = Date.now(), diff = now - d.getTime();
+      if (diff < 60000)   return Math.floor(diff/1000)   + ' dtk lalu';
+      if (diff < 3600000) return Math.floor(diff/60000)  + ' m lalu';
+      if (diff < 86400000) return Math.floor(diff/3600000) + ' j lalu';
+      return d.toLocaleDateString('id-ID');
+    };
+    const colors = { saweria: '#f5a623', trakteer: '#e53935' };
+    el.innerHTML = list.slice(0, 20).map(d => {
+      const color = colors[d.platform] || 'var(--ac)';
+      const amt = 'Rp ' + Number(d.amount).toLocaleString('id-ID');
+      const msg = d.message ? '<div style="font-size:.58rem;color:var(--tx2);margin-top:3px;font-style:italic;">"' + escHtml(d.message) + '"</div>' : '';
+      return `<div style="display:flex;align-items:flex-start;gap:10px;background:var(--panel);border:1px solid var(--bd);border-radius:8px;padding:9px 12px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;margin-top:4px;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="font-size:.7rem;font-weight:700;">${escHtml(d.name)}</div>
+            <div style="font-size:.58rem;color:${color};font-weight:700;">${d.platform.toUpperCase()}</div>
+            <div style="font-size:.58rem;color:var(--tx3);margin-left:auto;">${fmtTime(d.timestamp)}</div>
+          </div>
+          <div style="font-size:.68rem;font-weight:800;color:#fff;margin-top:2px;">${amt}</div>
+          ${msg}
+        </div>
+      </div>`;
+    }).join('');
+  } catch {
+    el.innerHTML = '<div style="font-size:.65rem;color:var(--tx3);text-align:center;padding:12px;">Gagal memuat data.</div>';
+  }
+}
 </script>
 <!-- ONBOARDING MODAL -->
 <div class="ob-modal-bk" id="ob-modal">
