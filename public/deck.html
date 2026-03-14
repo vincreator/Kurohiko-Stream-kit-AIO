@@ -55,6 +55,22 @@ html,body{height:100%;background:var(--bg);color:var(--tx);font-family:'Inter',s
 .sbox::placeholder{color:var(--tx3);}
 .setbtn{background:var(--s2);border:1px solid var(--bd);color:var(--tx2);padding:6px 10px;border-radius:var(--rs);font-size:.75rem;cursor:pointer;transition:all .15s;flex-shrink:0;}
 .setbtn:hover{border-color:var(--ac);color:var(--ac);}
+.setbtn.on{border-color:var(--ac);color:var(--ac);background:var(--adim);}
+
+/* PLAYLIST */
+.pl-row{display:flex;align-items:center;gap:7px;background:var(--s3);border:1px solid var(--bd2);border-radius:7px;padding:7px 8px;}
+.pl-idx{font-family:'Syne Mono',monospace;font-size:.58rem;color:var(--tx3);min-width:16px;text-align:right;}
+.pl-name{font-size:.68rem;color:var(--tx);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pl-mini{background:var(--s2);border:1px solid var(--bd);color:var(--tx2);border-radius:5px;cursor:pointer;padding:3px 6px;font-size:.62rem;}
+.pl-mini:hover{border-color:var(--ac);color:var(--ac);}
+.pl-mini.del{border-color:rgba(239,68,68,.3);color:#ef4444;background:rgba(239,68,68,.08);}
+.pl-lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;max-height:220px;overflow-y:auto;padding:2px;}
+.pl-lib::-webkit-scrollbar{width:3px;}
+.pl-lib::-webkit-scrollbar-thumb{background:var(--bd2);}
+.pl-lib-card{position:relative;aspect-ratio:1;border-radius:7px;overflow:hidden;border:1px solid var(--bd2);cursor:pointer;background:var(--s3);}
+.pl-lib-card img{width:100%;height:100%;object-fit:cover;display:block;}
+.pl-lib-card .nm{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.9));padding:12px 3px 3px;font-size:.44rem;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pl-lib-card .plus{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.75);border:1px solid var(--ac);color:var(--ac);width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.6rem;}
 
 /* TABS */
 .tabbar{display:flex;align-items:center;background:var(--s1);border-bottom:1px solid var(--bd);padding:0 10px;overflow-x:auto;gap:2px;flex-shrink:0;}
@@ -376,6 +392,8 @@ body::after{
 
   <div class="searchbar">
     <input type="text" class="sbox" id="srch" placeholder="Search..." oninput="render()">
+    <button class="setbtn" onclick="toggleQueueMode()" id="queue-mode-btn" title="Queue Mode (antrikan trigger)">⏳</button>
+    <button class="setbtn" onclick="openPlaylist()" id="playlist-btn" title="Playlist Mode">📃</button>
     <button class="setbtn" onclick="triggerRandom()" id="rnd-btn" title="Random Trigger — pilih meme acak">🎲</button>
     <button class="setbtn" onclick="toggleEditMode()" id="edit-mode-btn" title="Edit Mode">✏️</button>
     <button class="setbtn sc-mode-btn" id="sc-mode-btn" onclick="toggleShortcutMode()" title="Shortcut Mode">⌨</button>
@@ -386,6 +404,39 @@ body::after{
   <div id="counter-btn-wrap" class="counter-btn-wrap" style="display:none;flex-wrap:wrap;gap:8px;"></div>
   <div class="gwrap"><div class="grid" id="grid"></div></div>
 </div>
+</div>
+
+<!-- PLAYLIST OVERLAY -->
+<div class="overlay" id="playlist-overlay">
+  <div class="panel" style="max-width:760px;">
+    <div class="phd">
+      <div class="phd-title">Media Queue / Playlist</div>
+      <button class="pclose" onclick="closePlaylist()">✕</button>
+    </div>
+    <div class="pbody" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <div class="fl">Playlist Items</div>
+        <div style="display:flex;gap:7px;align-items:center;margin-bottom:8px;">
+          <button class="bcnl" style="padding:6px 10px;" onclick="playPlaylist()">▶ Play</button>
+          <button class="bcnl" style="padding:6px 10px;" onclick="shufflePlaylist()">🔀 Shuffle</button>
+          <button class="bcnl" style="padding:6px 10px;" onclick="clearPlaylist()">🧹 Clear</button>
+          <label style="margin-left:auto;font-size:.6rem;color:var(--tx2);display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="pl-loop" onchange="togglePlaylistLoop()"> Loop
+          </label>
+        </div>
+        <div id="playlist-items" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;padding-right:2px;"></div>
+      </div>
+      <div>
+        <div class="fl">Add from Library</div>
+        <input type="text" class="sbox" id="pl-search" placeholder="Cari media untuk ditambah..." oninput="renderPlaylistLibrary()" style="margin-bottom:8px;">
+        <div class="pl-lib" id="playlist-lib"></div>
+      </div>
+    </div>
+    <div class="pfooter" style="justify-content:space-between;">
+      <div style="font-size:.58rem;color:var(--tx3);">Tips: aktifkan Queue Mode agar klik card di Deck ikut antre.</div>
+      <button class="bsave" onclick="closePlaylist()">Done</button>
+    </div>
+  </div>
 </div>
 
 <!-- SETTINGS OVERLAY -->
@@ -626,11 +677,16 @@ document.addEventListener('click', () => closeOBSMenu());
 let files = [], active = null, lastSig = '';
 let curTab = 'all'; // 'all' or tab id
 let editingTabId = null;
+let playlist = [];
 
 let settings = defSettings();
 let settingsSaveTimer = null;
 function defSettings() {
-  return { cols: 4, rows: 4, hideAll: false, hideMobileUI: false, showShortcuts: false, tabs: [], counterColors: {}, shortcuts: {}, counterShortcuts: {}, tabShortcuts: {} };
+  return {
+    cols: 4, rows: 4, hideAll: false, hideMobileUI: false, showShortcuts: false,
+    tabs: [], counterColors: {}, shortcuts: {}, counterShortcuts: {}, tabShortcuts: {},
+    queueMode: false, playlistItems: [], playlistLoop: false
+  };
 }
 async function loadSettingsFromServer() {
   try {
@@ -638,8 +694,10 @@ async function loadSettingsFromServer() {
     const data = await r.json();
     if (data && typeof data === 'object') {
       settings = { ...defSettings(), ...data };
+      playlist = Array.isArray(settings.playlistItems) ? [...settings.playlistItems] : [];
     }
   } catch {}
+  applyQueueModeUI();
   updateGlobalKeyListeners();
 }
 function saveSettings() {
@@ -921,6 +979,16 @@ async function triggerRandom() {
   const btn = document.getElementById('rnd-btn');
   if (btn) { btn.classList.add('rnd-spin'); setTimeout(() => btn.classList.remove('rnd-spin'), 450); }
   try {
+    if (settings.queueMode) {
+      let candidates = files.map(f => f.name);
+      if (_lastRandom && candidates.length > 1) candidates = candidates.filter(n => n !== _lastRandom);
+      if (!candidates.length) { toast('Tidak ada media', '#ef4444'); return; }
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      _lastRandom = pick;
+      await trigger(pick, true);
+      toast('⏳ Queued: ' + pick);
+      return;
+    }
     const params = _lastRandom ? '?exclude=' + encodeURIComponent(_lastRandom) : '';
     const r = await fetch('/trigger/random' + params);
     const data = await r.json();
@@ -934,12 +1002,150 @@ async function triggerRandom() {
 }
 
 // ─── TRIGGER ─────────────────────────────────────────────
-async function trigger(name) {
+async function trigger(name, forceQueue = null) {
   const f = files.find(x => x.name === name); if (!f) return;
   active = name;
   document.querySelectorAll('.card').forEach(c => c.classList.toggle('act', c.dataset.nm === active));
+  const useQueue = forceQueue === null ? !!settings.queueMode : !!forceQueue;
   await fetch('/trigger', { method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ filename: name, ...(f.settings || {}) }) });
+    body: JSON.stringify({ filename: name, ...(f.settings || {}), queueMode: useQueue }) });
+}
+
+function applyQueueModeUI() {
+  const btn = document.getElementById('queue-mode-btn');
+  if (!btn) return;
+  btn.classList.toggle('on', !!settings.queueMode);
+  btn.textContent = settings.queueMode ? '⏳' : '▶';
+  btn.title = settings.queueMode
+    ? 'Queue Mode ON — trigger akan diantrikan'
+    : 'Queue Mode OFF — trigger langsung ganti media';
+}
+
+function toggleQueueMode() {
+  settings.queueMode = !settings.queueMode;
+  saveSettings();
+  applyQueueModeUI();
+  toast(settings.queueMode ? '⏳ Queue Mode ON' : '▶ Queue Mode OFF');
+}
+
+function savePlaylistState() {
+  settings.playlistItems = [...playlist];
+  saveSettings();
+}
+
+function openPlaylist() {
+  document.getElementById('playlist-overlay').classList.add('open');
+  document.getElementById('pl-loop').checked = !!settings.playlistLoop;
+  renderPlaylistItems();
+  renderPlaylistLibrary();
+}
+function closePlaylist() {
+  document.getElementById('playlist-overlay').classList.remove('open');
+}
+
+function getVisibleDeckFilesForPlaylist() {
+  const q = (document.getElementById('pl-search')?.value || '').toLowerCase();
+  let fs = [...files];
+  if (curTab !== 'all') {
+    const t = (settings.tabs || []).find(x => x.id === curTab);
+    if (t) {
+      const set = new Set(t.items || []);
+      fs = fs.filter(f => set.has(f.name));
+    }
+  }
+  return fs.filter(f => {
+    const lbl = getLabel(f).toLowerCase();
+    return !q || f.name.toLowerCase().includes(q) || lbl.includes(q);
+  });
+}
+
+function renderPlaylistLibrary() {
+  const box = document.getElementById('playlist-lib');
+  if (!box) return;
+  const fs = getVisibleDeckFilesForPlaylist();
+  if (!fs.length) {
+    box.innerHTML = '<div class="empty" style="grid-column:1/-1;padding:20px 6px;font-size:.62rem;">Tidak ada media</div>';
+    return;
+  }
+  box.innerHTML = fs.map(f => {
+    const t = getType(f.name);
+    const th = getThumb(f);
+    const thumb = t === 'audio'
+      ? `<div class="vaudio" style="height:100%;"><div class="vaudio-ic">🎵</div><div class="vaudio-nm">${f.name}</div></div>`
+      : `<img src="${th}" loading="lazy" alt="">`;
+    return `<div class="pl-lib-card" onclick="addToPlaylist('${f.name.replace(/'/g, "\\'")}')">${thumb}<div class="plus">＋</div><div class="nm">${getLabel(f)}</div></div>`;
+  }).join('');
+}
+
+function renderPlaylistItems() {
+  const box = document.getElementById('playlist-items');
+  if (!box) return;
+  if (!playlist.length) {
+    box.innerHTML = '<div class="empty" style="padding:20px 8px;font-size:.62rem;">Playlist kosong. Tambahkan media dari panel kanan.</div>';
+    return;
+  }
+  box.innerHTML = playlist.map((name, i) => {
+    const f = files.find(x => x.name === name);
+    const lbl = f ? getLabel(f) : name;
+    const safe = name.replace(/'/g, "\\'");
+    return `<div class="pl-row">
+      <div class="pl-idx">${i+1}.</div>
+      <div class="pl-name" title="${name}">${lbl}</div>
+      <button class="pl-mini" onclick="movePlaylistItem(${i}, -1)" title="Naik">↑</button>
+      <button class="pl-mini" onclick="movePlaylistItem(${i}, 1)" title="Turun">↓</button>
+      <button class="pl-mini" onclick="trigger('${safe}', true)" title="Trigger sekarang">▶</button>
+      <button class="pl-mini del" onclick="removeFromPlaylist(${i})" title="Hapus">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function addToPlaylist(name) {
+  playlist.push(name);
+  savePlaylistState();
+  renderPlaylistItems();
+  toast('➕ Added: ' + name);
+}
+function removeFromPlaylist(i) {
+  playlist.splice(i, 1);
+  savePlaylistState();
+  renderPlaylistItems();
+}
+function movePlaylistItem(i, d) {
+  const ni = i + d;
+  if (ni < 0 || ni >= playlist.length) return;
+  const [x] = playlist.splice(i, 1);
+  playlist.splice(ni, 0, x);
+  savePlaylistState();
+  renderPlaylistItems();
+}
+function clearPlaylist() {
+  playlist = [];
+  savePlaylistState();
+  renderPlaylistItems();
+  toast('🧹 Playlist cleared');
+}
+function shufflePlaylist() {
+  for (let i = playlist.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [playlist[i], playlist[j]] = [playlist[j], playlist[i]];
+  }
+  savePlaylistState();
+  renderPlaylistItems();
+  toast('🔀 Playlist shuffled');
+}
+function togglePlaylistLoop() {
+  settings.playlistLoop = !!document.getElementById('pl-loop').checked;
+  saveSettings();
+}
+
+async function playPlaylist() {
+  if (!playlist.length) { toast('Playlist kosong', '#ef4444'); return; }
+  const runList = settings.playlistLoop ? [...playlist, ...playlist] : [...playlist];
+  for (const name of runList) {
+    await trigger(name, true);
+    await new Promise(r => setTimeout(r, 35)); // jaga urutan emit
+  }
+  toast('📃 Playlist queued: ' + runList.length + ' item');
 }
 
 // ─── SETTINGS PANEL ──────────────────────────────────────
@@ -1485,12 +1691,17 @@ function saveCounterEdit() {
 document.getElementById('counter-edit-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('counter-edit-overlay')) closeCounterEdit();
 });
+document.getElementById('playlist-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('playlist-overlay')) closePlaylist();
+});
 
 // ─── INIT ────────────────────────────────────────────────
 (async () => {
   await loadSettingsFromServer();
+  playlist = Array.isArray(settings.playlistItems) ? [...settings.playlistItems] : [];
   applyGridSize();
   applyMobileClean();
+  applyQueueModeUI();
   applyShortcutVisibility();
   await loadCounters();
   loadFiles();
@@ -1513,11 +1724,13 @@ document.getElementById('counter-edit-overlay').addEventListener('click', e => {
   socket.on('deck-settings-updated', (data) => {
     const wasTab = curTab;
     settings = { ...defSettings(), ...data };
+    playlist = Array.isArray(settings.playlistItems) ? [...settings.playlistItems] : [];
     if (!settings.tabs.find(t => t.id === wasTab)) {
       curTab = settings.hideAll ? (settings.tabs[0]?.id || 'all') : 'all';
     }
     renderTabs();
     render();
+    applyQueueModeUI();
     applyMobileClean();
     updateCounterDisplay();
   });

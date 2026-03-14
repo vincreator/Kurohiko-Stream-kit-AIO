@@ -77,8 +77,22 @@ const ma=document.getElementById('ma');
 const IN ={fade:'fadeIn',pop:'popIn','slide-up':'slideUpIn','slide-down':'slideDnIn','slide-left':'slideLIn','slide-right':'slideRIn',bounce:'bounceIn','zoom-rotate':'zoomRotIn',flip:'flipIn'};
 const OUT={fade:'fadeOut',pop:'popOut','slide-up':'slideUpOut','slide-down':'slideDnOut','slide-left':'slideLOut','slide-right':'slideROut','zoom-rotate':'zoomRotOut',flip:'flipOut'};
 
-let hideTimer=null, hiding=false, queued=null, curData=null;
+let hideTimer=null, hiding=false, queueList=[], curData=null;
 let chromaRAF=null; // requestAnimationFrame id for chroma loop
+
+function enqueueMedia(data){
+  queueList.push(data);
+}
+function dequeueMedia(){
+  return queueList.shift();
+}
+function consumeNextQueue(){
+  if(hiding) return;
+  if(mw.style.display!=='none') return;
+  if(!queueList.length) return;
+  const next = dequeueMedia();
+  if(next) doShow(next);
+}
 
 function getType(n){
   const e=n.split('.').pop().toLowerCase();
@@ -191,14 +205,14 @@ function doShow(data){
     // Cleanup saat audio selesai natural
     ma.onended = () => {
       hiding=false;
-      if(queued){ const d=queued; queued=null; doShow(d); }
+      consumeNextQueue();
     };
     // Force-stop jika dur > 0
     if(dur > 0){
       hideTimer = setTimeout(()=>{
         ma.pause(); ma.src='';
         hiding=false;
-        if(queued){ const d=queued; queued=null; doShow(d); }
+        consumeNextQueue();
       }, dur*1000);
     }
     return;
@@ -249,7 +263,7 @@ function doHide(anim='fadeOut', speed=300){
   clearTimeout(hideTimer);
   if(mw.style.display==='none'){
     hiding=false;
-    if(queued){ const d=queued; queued=null; doShow(d); }
+    consumeNextQueue();
     return;
   }
   hiding=true;
@@ -263,7 +277,7 @@ function doHide(anim='fadeOut', speed=300){
     mi.style.display='none'; mv.style.display='none'; mc.style.display='none';
     mi.src=''; mv.src=''; ma.src='';
     hiding=false;
-    if(queued){ const d=queued; queued=null; doShow(d); }
+    consumeNextQueue();
   }, speed);
 }
 
@@ -271,21 +285,36 @@ socket.on('show-media', data=>{
   clearTimeout(hideTimer);
   const queue=data.queueMode===true;
 
-  if(hiding){
-    queued=data; return;
+  if(queue){
+    // Queue mode: pertama langsung tampil jika idle, sisanya antre FIFO
+    if(!hiding && mw.style.display==='none' && queueList.length===0){
+      doShow(data);
+      return;
+    }
+    enqueueMedia(data);
+    // Kalau sedang tampil, paksa transisi out agar antrean mulai jalan
+    if(!hiding && mw.style.display!=='none'){
+      const ao=OUT[curData&&curData.animOut||'fade']||'fadeOut';
+      const spd=curData&&curData.animOutSpeed||350;
+      doHide(ao,spd);
+    }
+    return;
   }
 
-  if(mw.style.display!=='none'&&queue){
-    queued=data;
-    const ao=OUT[curData&&curData.animOut||'fade']||'fadeOut';
-    const spd=curData&&curData.animOutSpeed||350;
-    doHide(ao,spd);
+  // Non-queue mode: clear antrean lalu tampilkan item terbaru
+  queueList = [];
+  if(hiding){
+    enqueueMedia(data);
+    return;
+  }
+  if(mw.style.display!=='none'){
+    doShow(data);
   } else {
     doShow(data);
   }
 });
 
-socket.on('hide-media',()=>{ queued=null; doHide(); });
+socket.on('hide-media',()=>{ queueList=[]; doHide(); });
 </script>
 </body>
 </html>
