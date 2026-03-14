@@ -42,6 +42,8 @@ const CONFIG_FILE        = path.join(BASE_DIR, 'config.json');         // config
 const DONATION_CONFIG_FILE = path.join(BASE_DIR, 'donation_config.json'); // config donation alert
 const DONATIONS_FILE       = path.join(BASE_DIR, 'donations.json');       // riwayat 50 donasi terakhir
 const TIMER_CONFIG_FILE    = path.join(BASE_DIR, 'timer_config.json');     // config widget timer/countdown
+const CHAT_COMMANDS_FILE   = path.join(BASE_DIR, 'chat_commands.json');    // config chat command trigger
+const CHAT_EVENTS_FILE     = path.join(BASE_DIR, 'chat_events.json');      // history chat trigger terbaru
 const PORT               = parseInt(process.env.PORT || '3000', 10);
 
 // Bikin folder kalau belum ada
@@ -569,6 +571,158 @@ app.post('/api/timer/add', (req, res) => {
   res.json({ ok: true, state: getTimerSnapshot() });
 });
 
+// ── CHAT COMMAND TRIGGER (TWITCH / YOUTUBE) ───────────
+// Gunakan endpoint ini dari bot/automation (Nightbot, StreamElements, dll)
+// untuk meneruskan command chat menjadi trigger media.
+
+let _chatCmdCache = null;
+let _chatEventCache = null;
+
+function loadChatCommandConfig() {
+  if (_chatCmdCache) return _chatCmdCache;
+  try { _chatCmdCache = JSON.parse(fs.readFileSync(CHAT_COMMANDS_FILE, 'utf8')); }
+  catch {
+    _chatCmdCache = {
+      enabled: false,
+      token: '',
+      defaultQueueMode: true,
+      platformFilter: 'all', // all|twitch|youtube
+      commands: [] // [{ command:'!meme', filename:'x.mp4', queueMode:true }]
+    };
+  }
+  return _chatCmdCache;
+}
+
+function saveChatCommandConfig(cfg) {
+  _chatCmdCache = cfg;
+  try { fs.writeFileSync(CHAT_COMMANDS_FILE, JSON.stringify(cfg, null, 2)); return true; }
+  catch(e) { console.error('saveChatCommandConfig failed:', e.message); return false; }
+}
+
+function loadChatEvents() {
+  if (_chatEventCache) return _chatEventCache;
+  try { _chatEventCache = JSON.parse(fs.readFileSync(CHAT_EVENTS_FILE, 'utf8')); }
+  catch { _chatEventCache = []; }
+  return _chatEventCache;
+}
+
+function pushChatEvent(ev) {
+  const list = loadChatEvents();
+  list.unshift(ev);
+  if (list.length > 80) list.length = 80;
+  try { fs.writeFileSync(CHAT_EVENTS_FILE, JSON.stringify(list, null, 2)); } catch(e) { console.error(e); }
+}
+
+function normCommand(s) {
+  const raw = String(s || '').trim().toLowerCase();
+  if (!raw) return '';
+  return raw.startsWith('!') ? raw : ('!' + raw);
+}
+
+app.get('/api/chat-command-config', (req, res) => res.json(loadChatCommandConfig()));
+
+app.post('/api/chat-command-config', (req, res) => {
+  const prev = loadChatCommandConfig();
+  const body = req.body || {};
+
+  const commands = Array.isArray(body.commands)
+    ? body.commands
+      .map(c => ({
+        command: normCommand(c && c.command),
+        filename: path.basename(String((c && c.filename) || '').trim()),
+        queueMode: c && c.queueMode === false ? false : true
+      }))
+      .filter(c => c.command && c.filename)
+    : (prev.commands || []);
+
+  const next = {
+    enabled: !!body.enabled,
+    token: String(body.token != null ? body.token : prev.token || '').trim(),
+    defaultQueueMode: body.defaultQueueMode === false ? false : true,
+    platformFilter: ['all', 'twitch', 'youtube'].includes(body.platformFilter) ? body.platformFilter : (prev.platformFilter || 'all'),
+    commands
+  };
+
+  const ok = saveChatCommandConfig(next);
+  res.json({ ok, config: next });
+});
+
+app.get('/api/chat-command-events', (req, res) => res.json(loadChatEvents()));
+
+// POST /chat/trigger
+// Body flexible:
+// {
+//   token, platform:'twitch'|'youtube', user:'name',
+//   command:'!meme'  OR  message:'!meme wow'
+// }
+app.post('/chat/trigger', (req, res) => {
+  const cfg = loadChatCommandConfig();
+  const b = req.body || {};
+
+  if (!cfg.enabled) {
+    return res.status(403).json({ ok: false, error: 'chat command disabled' });
+  }
+
+  const reqToken = String(req.query.token || b.token || req.headers['x-chat-token'] || '').trim();
+  if (cfg.token && reqToken !== cfg.token) {
+    return res.status(401).json({ ok: false, error: 'invalid token' });
+  }
+
+  const platform = String(b.platform || req.query.platform || 'unknown').toLowerCase();
+  if (cfg.platformFilter !== 'all' && platform !== cfg.platformFilter) {
+    pushChatEvent({
+      ts: new Date().toISOString(),
+      platform,
+      user: String(b.user || b.username || 'unknown'),
+      raw: String(b.message || b.command || ''),
+      status: 'ignored-platform'
+    });
+    return res.json({ ok: true, ignored: 'platform-filter' });
+  }
+
+  const raw = String(b.command || b.message || '').trim();
+  const command = b.command
+    ? normCommand(b.command)
+    : normCommand(raw.split(/\s+/)[0] || '');
+
+  if (!command) {
+    pushChatEvent({ ts: new Date().toISOString(), platform, user: String(b.user || b.username || 'unknown'), raw, status: 'invalid-command' });
+    return res.status(400).json({ ok: false, error: 'missing command' });
+  }
+
+  const map = (cfg.commands || []).find(c => normCommand(c.command) === command);
+  if (!map) {
+    pushChatEvent({ ts: new Date().toISOString(), platform, user: String(b.user || b.username || 'unknown'), raw, command, status: 'unmapped' });
+    return res.status(404).json({ ok: false, error: 'command not mapped', command });
+  }
+
+  const filename = path.basename(map.filename);
+  const mediaPath = path.join(MEDIA_DIR, filename);
+  if (!fs.existsSync(mediaPath)) {
+    pushChatEvent({ ts: new Date().toISOString(), platform, user: String(b.user || b.username || 'unknown'), raw, command, filename, status: 'file-missing' });
+    return res.status(404).json({ ok: false, error: 'media file not found', filename });
+  }
+
+  const meta = loadMeta();
+  const queueMode = map.queueMode === false ? false : !!cfg.defaultQueueMode;
+
+  incrementTrigger();
+  io.emit('show-media', { filename, ...(meta[filename] || {}), queueMode });
+
+  pushChatEvent({
+    ts: new Date().toISOString(),
+    platform,
+    user: String(b.user || b.username || 'unknown'),
+    raw,
+    command,
+    filename,
+    queueMode,
+    status: 'triggered'
+  });
+
+  res.json({ ok: true, command, filename, queueMode });
+});
+
 // ── COUNTER API ──────────────────────────────────────────
 // Counter = file .txt di TEXT_DIR yang dibaca OBS sebagai Text Source
 // Pola cache sama dengan meta: read-through / write-through
@@ -789,6 +943,8 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
     _appConfigCache = null;
     _donationConfigCache = null;
     _timerConfigCache = null;
+    _chatCmdCache = null;
+    _chatEventCache = null;
 
     res.json({ ok: true, restoredFiles, restoredConfigs });
   } catch(e) {

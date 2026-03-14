@@ -256,6 +256,12 @@ body::after{
         <div class="mc-desc">Webhook Saweria & Trakteer. Alert otomatis tampil di OBS saat ada donasi.</div>
         <div class="mc-arrow">→ SETUP</div>
       </a>
+      <a href="#" class="menu-card" onclick="openChatCmdSetup();return false;">
+        <div class="mc-ic">💬</div>
+        <div class="mc-title">Chat Command Trigger</div>
+        <div class="mc-desc">Twitch/YouTube chat command untuk trigger media via bot webhook.</div>
+        <div class="mc-arrow">→ SETUP</div>
+      </a>
       <a href="/deck.html?soundboard=1" class="menu-card">
         <div class="mc-ic">🔊</div>
         <div class="mc-title">Soundboard Mode</div>
@@ -391,6 +397,67 @@ body::after{
     </div>
 
     <button onclick="closeDonationSetup()" style="width:100%;margin-top:12px;background:var(--panel2);border:1px solid var(--bd2);color:var(--tx2);padding:10px;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;">Tutup</button>
+  </div>
+</div>
+
+<!-- CHAT COMMAND TRIGGER MODAL -->
+<div class="modal-bg" id="chatcmd-modal">
+  <div class="modal-box" style="max-width:540px;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;position:sticky;top:0;background:var(--panel);z-index:1;padding-bottom:12px;border-bottom:1px solid var(--bd);">
+      <div style="font-size:.9rem;font-weight:800;">💬 Chat Command Trigger</div>
+      <button onclick="closeChatCmdSetup()" style="background:none;border:1px solid var(--bd2);color:var(--tx2);width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:.8rem;">✕</button>
+    </div>
+
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:.62rem;color:var(--tx2);cursor:pointer;margin-bottom:8px;">
+        <input type="checkbox" id="chatcmd-enabled"> Enable Chat Command Trigger
+      </label>
+      <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Secret Token</div>
+      <input id="chatcmd-token" type="text" placeholder="isi token random (disarankan)" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;outline:none;margin-bottom:9px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Platform Filter</div>
+          <select id="chatcmd-platform" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;outline:none;">
+            <option value="all">All</option>
+            <option value="twitch">Twitch</option>
+            <option value="youtube">YouTube</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Default Queue Mode</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:.62rem;color:var(--tx2);height:34px;cursor:pointer;">
+            <input type="checkbox" id="chatcmd-queue" checked> Queue trigger by default
+          </label>
+        </div>
+      </div>
+      <button onclick="saveChatCmdConfig()" id="chatcmd-save-btn" style="width:100%;margin-top:10px;background:var(--ac);border:none;color:#000;padding:10px;border-radius:8px;font-size:.72rem;font-weight:800;cursor:pointer;">💾 Simpan Config</button>
+    </div>
+
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:7px;">Webhook URL</div>
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <div id="chatcmd-url" class="mono" style="flex:1;background:var(--panel);border:1px solid var(--bd2);border-radius:6px;padding:7px 10px;font-size:.6rem;color:var(--ac);word-break:break-all;">—</div>
+        <button onclick="copyChatCmdUrl()" style="background:var(--ac-dim);border:1px solid rgba(56,189,248,.3);color:var(--ac);padding:6px 10px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;">Copy</button>
+      </div>
+      <div style="font-size:.55rem;color:var(--tx3);margin-top:6px;line-height:1.5;">Payload minimal: <span class="mono">{"platform":"twitch","user":"kuro","message":"!meme"}</span></div>
+    </div>
+
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);">Command Mapping</div>
+        <button onclick="addChatCmdRow()" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx2);padding:4px 8px;border-radius:6px;font-size:.62rem;font-weight:700;cursor:pointer;">+ Add</button>
+      </div>
+      <div id="chatcmd-map-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:8px;">Recent Events</div>
+      <div id="chatcmd-events" style="display:flex;flex-direction:column;gap:5px;max-height:180px;overflow-y:auto;">
+        <div style="font-size:.62rem;color:var(--tx3);text-align:center;padding:10px;">Belum ada event.</div>
+      </div>
+    </div>
+
+    <button onclick="closeChatCmdSetup()" style="width:100%;margin-top:6px;background:var(--panel2);border:1px solid var(--bd2);color:var(--tx2);padding:10px;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;">Tutup</button>
   </div>
 </div>
 
@@ -1182,6 +1249,184 @@ async function loadRecentDonations() {
   } catch {
     el.innerHTML = '<div style="font-size:.65rem;color:var(--tx3);text-align:center;padding:12px;">Gagal memuat data.</div>';
   }
+}
+
+// ─── CHAT COMMAND TRIGGER SETUP ─────────────────────────
+let _chatCmdBaseUrl = '';
+let _chatCmdMaps = [];
+let _chatCmdMedia = [];
+
+function normalizeCmd(s) {
+  const x = String(s || '').trim().toLowerCase();
+  if (!x) return '';
+  return x.startsWith('!') ? x : ('!' + x);
+}
+
+function buildChatCmdUrl() {
+  const tok = (document.getElementById('chatcmd-token')?.value || '').trim();
+  const q = tok ? ('?token=' + encodeURIComponent(tok)) : '';
+  const url = (_chatCmdBaseUrl || window.location.origin) + '/chat/trigger' + q;
+  const el = document.getElementById('chatcmd-url');
+  if (el) el.textContent = url;
+}
+
+async function loadChatCmdMedia() {
+  try {
+    const r = await fetch('/api/media');
+    const fs = await r.json();
+    _chatCmdMedia = (fs || []).map(f => f.name);
+  } catch { _chatCmdMedia = []; }
+}
+
+function renderChatCmdRows() {
+  const box = document.getElementById('chatcmd-map-list');
+  if (!box) return;
+  if (!_chatCmdMaps.length) {
+    box.innerHTML = '<div style="font-size:.62rem;color:var(--tx3);text-align:center;padding:10px;">Belum ada mapping command.</div>';
+    return;
+  }
+  box.innerHTML = _chatCmdMaps.map((m, i) => {
+    const opts = _chatCmdMedia.map(fn => `<option value="${fn.replace(/"/g,'&quot;')}" ${m.filename===fn?'selected':''}>${fn}</option>`).join('');
+    return `<div style="display:grid;grid-template-columns:1fr 1.2fr auto auto;gap:6px;align-items:center;">
+      <input value="${(m.command || '').replace(/"/g,'&quot;')}" oninput="onChatCmdRowChange(${i}, 'command', this.value)" placeholder="!meme" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:6px 8px;font-size:.66rem;outline:none;">
+      <select onchange="onChatCmdRowChange(${i}, 'filename', this.value)" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:6px 8px;font-size:.66rem;outline:none;">
+        <option value="">-- pilih media --</option>${opts}
+      </select>
+      <label style="font-size:.6rem;color:var(--tx2);display:flex;align-items:center;gap:5px;white-space:nowrap;">
+        <input type="checkbox" ${m.queueMode===false?'':'checked'} onchange="onChatCmdRowChange(${i}, 'queueMode', this.checked)">queue
+      </label>
+      <button onclick="removeChatCmdRow(${i})" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;padding:5px 8px;border-radius:6px;font-size:.62rem;cursor:pointer;">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function onChatCmdRowChange(i, key, v) {
+  if (!_chatCmdMaps[i]) return;
+  _chatCmdMaps[i][key] = v;
+  if (key === 'command') _chatCmdMaps[i][key] = normalizeCmd(v);
+}
+
+function addChatCmdRow() {
+  _chatCmdMaps.push({ command: '', filename: '', queueMode: true });
+  renderChatCmdRows();
+}
+
+function removeChatCmdRow(i) {
+  _chatCmdMaps.splice(i, 1);
+  renderChatCmdRows();
+}
+
+async function loadChatCmdEvents() {
+  const box = document.getElementById('chatcmd-events');
+  if (!box) return;
+  try {
+    const r = await fetch('/api/chat-command-events');
+    const list = await r.json();
+    if (!list.length) {
+      box.innerHTML = '<div style="font-size:.62rem;color:var(--tx3);text-align:center;padding:10px;">Belum ada event.</div>';
+      return;
+    }
+    box.innerHTML = list.slice(0, 30).map(e => {
+      const c = e.status === 'triggered' ? '#22c55e' : '#f59e0b';
+      const cmd = e.command ? escHtml(e.command) : '-';
+      const who = escHtml(e.user || 'unknown');
+      const pl = escHtml(e.platform || '-');
+      const file = e.filename ? ` → ${escHtml(e.filename)}` : '';
+      return `<div style="font-size:.6rem;background:var(--panel);border:1px solid var(--bd);border-radius:6px;padding:7px 8px;line-height:1.5;">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="color:${c};font-weight:700;">${escHtml(e.status || 'unknown')}</span>
+          <span style="color:var(--tx3);">${pl}</span>
+          <span style="margin-left:auto;color:var(--tx3);">${new Date(e.ts).toLocaleTimeString('id-ID')}</span>
+        </div>
+        <div style="color:var(--tx2);">${who} · ${cmd}${file}</div>
+      </div>`;
+    }).join('');
+  } catch {
+    box.innerHTML = '<div style="font-size:.62rem;color:var(--tx3);text-align:center;padding:10px;">Gagal memuat event.</div>';
+  }
+}
+
+async function openChatCmdSetup() {
+  document.getElementById('chatcmd-modal').classList.add('open');
+  try {
+    const r = await fetch('/api/local-ip');
+    const { ip, port } = await r.json();
+    _chatCmdBaseUrl = 'http://' + ip + ':' + port;
+  } catch { _chatCmdBaseUrl = window.location.origin; }
+
+  await loadChatCmdMedia();
+
+  try {
+    const r = await fetch('/api/chat-command-config');
+    const cfg = await r.json();
+    document.getElementById('chatcmd-enabled').checked = !!cfg.enabled;
+    document.getElementById('chatcmd-token').value = cfg.token || '';
+    document.getElementById('chatcmd-platform').value = cfg.platformFilter || 'all';
+    document.getElementById('chatcmd-queue').checked = cfg.defaultQueueMode !== false;
+    _chatCmdMaps = Array.isArray(cfg.commands) ? cfg.commands.map(c => ({
+      command: normalizeCmd(c.command),
+      filename: c.filename || '',
+      queueMode: c.queueMode === false ? false : true
+    })) : [];
+  } catch {
+    _chatCmdMaps = [];
+  }
+
+  buildChatCmdUrl();
+  renderChatCmdRows();
+  loadChatCmdEvents();
+}
+
+function closeChatCmdSetup() {
+  document.getElementById('chatcmd-modal').classList.remove('open');
+}
+document.getElementById('chatcmd-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('chatcmd-modal')) closeChatCmdSetup();
+});
+
+function copyChatCmdUrl() {
+  cp(document.getElementById('chatcmd-url').textContent || (_chatCmdBaseUrl + '/chat/trigger'));
+}
+
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'chatcmd-token') buildChatCmdUrl();
+});
+
+async function saveChatCmdConfig() {
+  const btn = document.getElementById('chatcmd-save-btn');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const clean = _chatCmdMaps
+      .map(x => ({
+        command: normalizeCmd(x.command),
+        filename: String(x.filename || '').trim(),
+        queueMode: x.queueMode === false ? false : true
+      }))
+      .filter(x => x.command && x.filename);
+
+    const body = {
+      enabled: !!document.getElementById('chatcmd-enabled').checked,
+      token: (document.getElementById('chatcmd-token').value || '').trim(),
+      platformFilter: document.getElementById('chatcmd-platform').value || 'all',
+      defaultQueueMode: !!document.getElementById('chatcmd-queue').checked,
+      commands: clean
+    };
+
+    const r = await fetch('/api/chat-command-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error('save gagal');
+    _chatCmdMaps = clean;
+    renderChatCmdRows();
+    buildChatCmdUrl();
+    toast('✅ Chat command config disimpan');
+  } catch(e) {
+    toast('Gagal simpan: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = '💾 Simpan Config';
 }
 
 // ─── TIMER / COUNTDOWN SETUP ─────────────────────────────

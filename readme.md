@@ -33,6 +33,7 @@ Ditengah jalan keinget mau nambah WC, Kamar, Pintu, Jendela,etc. Jadinya kyk ya 
 * **📃 Media Queue / Playlist Mode:** Trigger bisa diantrikan (FIFO) dan jalankan playlist beberapa media sekali klik
 * **⏱️ Timer / Countdown / Stopwatch:** Widget realtime untuk OBS (countdown + count-up) + kontrol Start/Pause/Resume/Reset dari dashboard
 * **🔊 Soundboard Mode (tanpa OBS):** Mainkan clip audio langsung dari Deck secara lokal
+* **💬 Chat Command Trigger (Twitch/YouTube):** Trigger media lewat command chat via webhook bot
 
 ---
 
@@ -78,6 +79,7 @@ Karena folder `node_modules` tidak disertakan di repository ini, ikuti langkah b
 | 📃 Media Queue / Playlist Mode | [docs/media-queue-playlist.md](docs/media-queue-playlist.md) |
 | ⏱️ Timer / Countdown / Stopwatch | [docs/timer-countdown-widget.md](docs/timer-countdown-widget.md) |
 | 🔊 Soundboard Mode (tanpa OBS) | [docs/soundboard-mode.md](docs/soundboard-mode.md) |
+| 💬 Chat Command Trigger (Twitch/YouTube) | [docs/chat-command-trigger.md](docs/chat-command-trigger.md) |
 
 ---
 
