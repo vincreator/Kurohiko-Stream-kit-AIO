@@ -31,6 +31,7 @@ Ditengah jalan keinget mau nambah WC, Kamar, Pintu, Jendela,etc. Jadinya kyk ya 
 * **🕐 Auto-Hide Timer:** Atur durasi tampil per media — image countdown, video/audio force-stop atau biarkan main sampai selesai
 * **🔔 Donation Alert:** Webhook Saweria & Trakteer — alert otomatis tampil di OBS saat donasi masuk, lengkap dengan nama, jumlah, dan pesan
 * **📃 Media Queue / Playlist Mode:** Trigger bisa diantrikan (FIFO) dan jalankan playlist beberapa media sekali klik
+* **⏱️ Timer / Countdown Widget:** Widget countdown realtime untuk OBS + kontrol Start/Pause/Resume/Reset dari dashboard
 
 ---
 
@@ -74,6 +75,7 @@ Karena folder `node_modules` tidak disertakan di repository ini, ikuti langkah b
 | 🕐 Auto-Hide Timer per Media | [docs/auto-hide-timer.md](docs/auto-hide-timer.md) |
 | 🔔 Donation Alert (Saweria & Trakteer) | [docs/donation-alert.md](docs/donation-alert.md) |
 | 📃 Media Queue / Playlist Mode | [docs/media-queue-playlist.md](docs/media-queue-playlist.md) |
+| ⏱️ Timer / Countdown Widget | [docs/timer-countdown-widget.md](docs/timer-countdown-widget.md) |
 
 ---
 

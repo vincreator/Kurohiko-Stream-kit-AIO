@@ -41,6 +41,7 @@ const STATS_FILE         = path.join(BASE_DIR, 'stats.json');          // statis
 const CONFIG_FILE        = path.join(BASE_DIR, 'config.json');         // config app (folder assets, dll)
 const DONATION_CONFIG_FILE = path.join(BASE_DIR, 'donation_config.json'); // config donation alert
 const DONATIONS_FILE       = path.join(BASE_DIR, 'donations.json');       // riwayat 50 donasi terakhir
+const TIMER_CONFIG_FILE    = path.join(BASE_DIR, 'timer_config.json');     // config widget timer/countdown
 const PORT               = parseInt(process.env.PORT || '3000', 10);
 
 // Bikin folder kalau belum ada
@@ -366,6 +367,179 @@ app.post('/webhook/trakteer', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── TIMER / COUNTDOWN WIDGET ───────────────────────────
+// Widget OBS realtime yang bisa Start/Pause/Resume/Reset dari dashboard/API.
+// Tick dikelola di server agar sinkron antar semua client.
+
+let _timerConfigCache = null;
+function loadTimerConfig() {
+  if (_timerConfigCache) return _timerConfigCache;
+  try { _timerConfigCache = JSON.parse(fs.readFileSync(TIMER_CONFIG_FILE, 'utf8')); }
+  catch {
+    _timerConfigCache = {
+      label: 'COUNTDOWN',
+      durationSec: 300,
+      autoRestart: false,
+      color: '#38bdf8'
+    };
+  }
+  return _timerConfigCache;
+}
+function saveTimerConfig(cfg) {
+  _timerConfigCache = cfg;
+  try { fs.writeFileSync(TIMER_CONFIG_FILE, JSON.stringify(cfg, null, 2)); return true; }
+  catch(e) { console.error('saveTimerConfig failed:', e.message); return false; }
+}
+
+const timerState = {
+  running: false,
+  durationMs: (loadTimerConfig().durationSec || 300) * 1000,
+  remainingMs: (loadTimerConfig().durationSec || 300) * 1000,
+  endsAt: 0,
+  _lastSecond: null,
+};
+
+function clampNumber(v, min, max, def) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return def;
+  return Math.max(min, Math.min(max, n));
+}
+function getTimerRemainingMs() {
+  if (!timerState.running) return Math.max(0, timerState.remainingMs);
+  return Math.max(0, timerState.endsAt - Date.now());
+}
+function getTimerSnapshot() {
+  const cfg = loadTimerConfig();
+  return {
+    running: timerState.running,
+    remainingMs: getTimerRemainingMs(),
+    totalMs: timerState.durationMs,
+    label: cfg.label || 'COUNTDOWN',
+    autoRestart: !!cfg.autoRestart,
+    color: cfg.color || '#38bdf8',
+  };
+}
+function emitTimerSync() {
+  io.emit('timer-sync', getTimerSnapshot());
+}
+
+// Tick loop: emit per detik agar ringan tapi tetap realtime
+setInterval(() => {
+  if (!timerState.running) return;
+  const rem = getTimerRemainingMs();
+  const sec = Math.ceil(rem / 1000);
+
+  if (sec !== timerState._lastSecond) {
+    timerState._lastSecond = sec;
+    emitTimerSync();
+  }
+
+  if (rem <= 0) {
+    const cfg = loadTimerConfig();
+    timerState.running = false;
+    timerState.remainingMs = 0;
+    timerState.endsAt = 0;
+    timerState._lastSecond = null;
+    emitTimerSync();
+    io.emit('timer-finished');
+
+    if (cfg.autoRestart) {
+      timerState.running = true;
+      timerState.remainingMs = timerState.durationMs;
+      timerState.endsAt = Date.now() + timerState.remainingMs;
+      timerState._lastSecond = null;
+      emitTimerSync();
+    }
+  }
+}, 200);
+
+app.get('/api/timer/config', (req, res) => res.json(loadTimerConfig()));
+
+app.post('/api/timer/config', (req, res) => {
+  const prev = loadTimerConfig();
+  const body = req.body || {};
+  const next = {
+    ...prev,
+    label: String(body.label ?? prev.label ?? 'COUNTDOWN').slice(0, 40),
+    durationSec: clampNumber(body.durationSec, 1, 24 * 60 * 60, prev.durationSec || 300),
+    autoRestart: !!body.autoRestart,
+    color: /^#[0-9a-fA-F]{6}$/.test(String(body.color || '')) ? String(body.color) : (prev.color || '#38bdf8')
+  };
+  const ok = saveTimerConfig(next);
+
+  // Kalau timer belum jalan, sinkronkan total+remaining ke durasi baru
+  if (!timerState.running) {
+    timerState.durationMs = next.durationSec * 1000;
+    timerState.remainingMs = timerState.durationMs;
+  } else {
+    // Saat running, hanya update totalMs (remaining tetap berjalan)
+    timerState.durationMs = next.durationSec * 1000;
+  }
+
+  emitTimerSync();
+  io.emit('timer-config-updated', next);
+  res.json({ ok, config: next });
+});
+
+app.get('/api/timer/state', (req, res) => res.json(getTimerSnapshot()));
+
+app.post('/api/timer/start', (req, res) => {
+  const body = req.body || {};
+  const cfg = loadTimerConfig();
+  const sec = clampNumber(body.seconds, 1, 24 * 60 * 60, cfg.durationSec || 300);
+  timerState.durationMs = sec * 1000;
+  timerState.remainingMs = timerState.durationMs;
+  timerState.running = true;
+  timerState.endsAt = Date.now() + timerState.remainingMs;
+  timerState._lastSecond = null;
+  emitTimerSync();
+  res.json({ ok: true, state: getTimerSnapshot() });
+});
+
+app.post('/api/timer/pause', (req, res) => {
+  if (timerState.running) {
+    timerState.remainingMs = getTimerRemainingMs();
+    timerState.running = false;
+    timerState.endsAt = 0;
+    timerState._lastSecond = null;
+  }
+  emitTimerSync();
+  res.json({ ok: true, state: getTimerSnapshot() });
+});
+
+app.post('/api/timer/resume', (req, res) => {
+  if (!timerState.running && timerState.remainingMs > 0) {
+    timerState.running = true;
+    timerState.endsAt = Date.now() + timerState.remainingMs;
+    timerState._lastSecond = null;
+  }
+  emitTimerSync();
+  res.json({ ok: true, state: getTimerSnapshot() });
+});
+
+app.post('/api/timer/reset', (req, res) => {
+  timerState.running = false;
+  timerState.endsAt = 0;
+  timerState.remainingMs = timerState.durationMs;
+  timerState._lastSecond = null;
+  emitTimerSync();
+  res.json({ ok: true, state: getTimerSnapshot() });
+});
+
+app.post('/api/timer/add', (req, res) => {
+  const body = req.body || {};
+  const addSec = clampNumber(body.seconds, -24 * 60 * 60, 24 * 60 * 60, 0);
+  if (timerState.running) {
+    timerState.endsAt += addSec * 1000;
+    timerState.remainingMs = getTimerRemainingMs();
+  } else {
+    timerState.remainingMs = Math.max(0, timerState.remainingMs + addSec * 1000);
+  }
+  timerState._lastSecond = null;
+  emitTimerSync();
+  res.json({ ok: true, state: getTimerSnapshot() });
+});
+
 // ── COUNTER API ──────────────────────────────────────────
 // Counter = file .txt di TEXT_DIR yang dibaca OBS sebagai Text Source
 // Pola cache sama dengan meta: read-through / write-through
@@ -585,6 +759,7 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
     _deckSettingsCache = undefined; // undefined agar loadDeckSettings re-read dari disk
     _appConfigCache = null;
     _donationConfigCache = null;
+    _timerConfigCache = null;
 
     res.json({ ok: true, restoredFiles, restoredConfigs });
   } catch(e) {
@@ -595,7 +770,10 @@ app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
 });
 
 // ── SOCKET ───────────────────────────────────────────────
-io.on('connection', s => console.log('Client connected:', s.id));
+io.on('connection', s => {
+  console.log('Client connected:', s.id);
+  s.emit('timer-sync', getTimerSnapshot());
+});
 
 // ── START ────────────────────────────────────────────────
 server.listen(PORT, '0.0.0.0', () => {

@@ -256,6 +256,12 @@ body::after{
         <div class="mc-desc">Webhook Saweria & Trakteer. Alert otomatis tampil di OBS saat ada donasi.</div>
         <div class="mc-arrow">→ SETUP</div>
       </a>
+      <a href="#" class="menu-card" onclick="openTimerSetup();return false;">
+        <div class="mc-ic">⏱️</div>
+        <div class="mc-title">Timer / Countdown</div>
+        <div class="mc-desc">Widget countdown realtime untuk OBS + kontrol start/pause/reset dari dashboard.</div>
+        <div class="mc-arrow">→ SETUP</div>
+      </a>
     </div>
 
     <!-- Active Counters List (dipindah dari old More Tools) -->
@@ -379,6 +385,62 @@ body::after{
     </div>
 
     <button onclick="closeDonationSetup()" style="width:100%;margin-top:12px;background:var(--panel2);border:1px solid var(--bd2);color:var(--tx2);padding:10px;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;">Tutup</button>
+  </div>
+</div>
+
+<!-- TIMER / COUNTDOWN MODAL -->
+<div class="modal-bg" id="timer-modal">
+  <div class="modal-box" style="max-width:470px;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;position:sticky;top:0;background:var(--panel);z-index:1;padding-bottom:12px;border-bottom:1px solid var(--bd);">
+      <div style="font-size:.9rem;font-weight:800;">⏱️ Timer / Countdown Setup</div>
+      <button onclick="closeTimerSetup()" style="background:none;border:1px solid var(--bd2);color:var(--tx2);width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:.8rem;">✕</button>
+    </div>
+
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:5px;">OBS Browser Source URL</div>
+      <div style="display:flex;gap:6px;">
+        <div id="timer-overlay-url" class="mono" style="flex:1;background:var(--panel);border:1px solid var(--bd2);border-radius:6px;padding:7px 10px;font-size:.6rem;color:var(--ac);word-break:break-all;">—</div>
+        <button onclick="copyTimerUrl()" style="flex-shrink:0;background:var(--ac-dim);border:1px solid rgba(56,189,248,.3);color:var(--ac);padding:6px 10px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;white-space:nowrap;">Copy</button>
+      </div>
+      <div style="font-size:.55rem;color:var(--tx3);margin-top:6px;">Tambahkan sebagai Browser Source di OBS — 1920×1080, transparent background.</div>
+    </div>
+
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:6px;">Widget Config</div>
+      <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Label</div>
+      <input id="timer-label" type="text" maxlength="40" placeholder="COUNTDOWN" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;outline:none;margin-bottom:9px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Durasi (detik)</div>
+          <input id="timer-duration" type="number" min="1" max="86400" value="300" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;outline:none;">
+        </div>
+        <div>
+          <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Warna Accent</div>
+          <input id="timer-color" type="color" value="#38bdf8" style="width:100%;height:34px;background:var(--panel);border:1px solid var(--bd2);border-radius:6px;padding:2px;cursor:pointer;">
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:.62rem;color:var(--tx2);margin-top:10px;cursor:pointer;">
+        <input id="timer-auto-restart" type="checkbox"> Auto restart saat 00:00
+      </label>
+      <button onclick="saveTimerConfig()" id="timer-save-btn" style="width:100%;margin-top:10px;background:var(--ac);border:none;color:#000;padding:10px;border-radius:8px;font-size:.72rem;font-weight:800;cursor:pointer;">💾 Simpan Config</button>
+    </div>
+
+    <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+        <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);">Control</div>
+        <div id="timer-state-preview" style="font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:800;color:var(--ac);">05:00</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">
+        <button onclick="timerAction('start')" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#22c55e;padding:8px;border-radius:7px;font-size:.66rem;font-weight:700;cursor:pointer;">▶ Start</button>
+        <button onclick="timerAction('pause')" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#f59e0b;padding:8px;border-radius:7px;font-size:.66rem;font-weight:700;cursor:pointer;">⏸ Pause</button>
+        <button onclick="timerAction('resume')" style="background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.35);color:#38bdf8;padding:8px;border-radius:7px;font-size:.66rem;font-weight:700;cursor:pointer;">⏯ Resume</button>
+        <button onclick="timerAction('reset')" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);color:#ef4444;padding:8px;border-radius:7px;font-size:.66rem;font-weight:700;cursor:pointer;">↺ Reset</button>
+        <button onclick="timerAction('add', 60)" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);padding:8px;border-radius:7px;font-size:.66rem;font-weight:700;cursor:pointer;">+1m</button>
+        <button onclick="timerAction('add', -60)" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);padding:8px;border-radius:7px;font-size:.66rem;font-weight:700;cursor:pointer;">-1m</button>
+      </div>
+    </div>
+
+    <button onclick="closeTimerSetup()" style="width:100%;margin-top:6px;background:var(--panel2);border:1px solid var(--bd2);color:var(--tx2);padding:10px;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;">Tutup</button>
   </div>
 </div>
 
@@ -1101,6 +1163,119 @@ async function loadRecentDonations() {
     }).join('');
   } catch {
     el.innerHTML = '<div style="font-size:.65rem;color:var(--tx3);text-align:center;padding:12px;">Gagal memuat data.</div>';
+  }
+}
+
+// ─── TIMER / COUNTDOWN SETUP ─────────────────────────────
+let _timerBaseUrl = '';
+let _timerSocketBound = false;
+
+function fmtTimerMs(ms) {
+  const t = Math.max(0, Math.ceil((Number(ms) || 0) / 1000));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  if (h > 0) return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function paintTimerState(state) {
+  const el = document.getElementById('timer-state-preview');
+  if (!el || !state) return;
+  el.textContent = fmtTimerMs(state.remainingMs);
+  el.style.color = state.running ? 'var(--gn)' : 'var(--ac)';
+}
+
+async function openTimerSetup() {
+  document.getElementById('timer-modal').classList.add('open');
+  try {
+    const r = await fetch('/api/local-ip');
+    const { ip, port } = await r.json();
+    _timerBaseUrl = 'http://' + ip + ':' + port;
+  } catch {
+    _timerBaseUrl = window.location.origin;
+  }
+  document.getElementById('timer-overlay-url').textContent = _timerBaseUrl + '/timer.html';
+
+  try {
+    const [cfgRes, stRes] = await Promise.all([
+      fetch('/api/timer/config'),
+      fetch('/api/timer/state')
+    ]);
+    const cfg = await cfgRes.json();
+    const st = await stRes.json();
+    document.getElementById('timer-label').value = cfg.label || 'COUNTDOWN';
+    document.getElementById('timer-duration').value = Number(cfg.durationSec) || 300;
+    document.getElementById('timer-color').value = cfg.color || '#38bdf8';
+    document.getElementById('timer-auto-restart').checked = !!cfg.autoRestart;
+    paintTimerState(st);
+  } catch(e) {
+    toast('Gagal load timer: ' + e.message);
+  }
+
+  if (!_timerSocketBound && typeof socket !== 'undefined') {
+    _timerSocketBound = true;
+    socket.on('timer-sync', (s) => paintTimerState(s));
+    socket.on('timer-finished', () => toast('⏱️ Timer finished')); 
+  }
+}
+
+function closeTimerSetup() {
+  document.getElementById('timer-modal').classList.remove('open');
+}
+document.getElementById('timer-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('timer-modal')) closeTimerSetup();
+});
+
+function copyTimerUrl() {
+  cp(document.getElementById('timer-overlay-url').textContent || (_timerBaseUrl + '/timer.html'));
+}
+
+async function saveTimerConfig() {
+  const btn = document.getElementById('timer-save-btn');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const body = {
+      label: document.getElementById('timer-label').value.trim() || 'COUNTDOWN',
+      durationSec: Number(document.getElementById('timer-duration').value) || 300,
+      color: document.getElementById('timer-color').value || '#38bdf8',
+      autoRestart: !!document.getElementById('timer-auto-restart').checked
+    };
+    const r = await fetch('/api/timer/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error('Save gagal');
+    toast('✅ Timer config disimpan');
+  } catch(e) {
+    toast('Gagal simpan timer: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = '💾 Simpan Config';
+}
+
+async function timerAction(type, value) {
+  try {
+    if (type === 'start') {
+      await fetch('/api/timer/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seconds: Number(document.getElementById('timer-duration').value) || 300 })
+      });
+    } else if (type === 'add') {
+      await fetch('/api/timer/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seconds: Number(value) || 0 })
+      });
+    } else {
+      await fetch('/api/timer/' + type, { method: 'POST' });
+    }
+    const st = await (await fetch('/api/timer/state')).json();
+    paintTimerState(st);
+  } catch(e) {
+    toast('Timer action gagal: ' + e.message);
   }
 }
 </script>
