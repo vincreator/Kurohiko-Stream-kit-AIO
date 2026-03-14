@@ -1,6 +1,6 @@
 # ⏱️ Timer / Countdown Widget untuk OBS
 
-Widget countdown realtime untuk OBS yang bisa dikontrol dari dashboard KSK.
+Widget realtime untuk OBS yang mendukung **countdown** dan **count-up (stopwatch)**, dikontrol langsung dari dashboard KSK.
 
 Fitur utama:
 - Start / Pause / Resume / Reset
@@ -8,6 +8,8 @@ Fitur utama:
 - Label custom (contoh: `STREAM STARTING IN`)
 - Warna accent custom
 - Auto-restart saat timer habis (opsional)
+- Mode `countdown` dan `countup`
+- Preset scene: `Starting Soon`, `BRB`, `Intermission`, `Live Stopwatch`
 
 ---
 
@@ -16,6 +18,7 @@ Fitur utama:
 1. Buka dashboard KSK
 2. Klik **⏱️ Timer / Countdown**
 3. Atur:
+  - `Mode` (`countdown` / `countup`)
    - `Label`
    - `Durasi (detik)`
    - `Warna Accent`
@@ -35,15 +38,17 @@ Fitur utama:
 
 ---
 
-## 3) Kontrol Timer
+## 3) Kontrol Timer / Stopwatch
 
 Dari modal setup di dashboard:
 
-- `▶ Start` → mulai countdown dari durasi input
+- `▶ Start` → mulai timer sesuai mode + durasi input
 - `⏸ Pause` → jeda
 - `⏯ Resume` → lanjutkan
-- `↺ Reset` → kembali ke durasi awal
-- `+1m / -1m` → tambah/kurangi waktu berjalan
+- `↺ Reset` → kembali ke titik awal mode
+- `+1m / -1m`
+  - countdown: menambah/mengurangi **sisa waktu**
+  - countup: memajukan/memundurkan **elapsed time**
 
 Preview waktu realtime juga tampil di modal.
 
@@ -59,6 +64,7 @@ Body contoh:
 ```json
 {
   "label": "STREAM STARTING IN",
+  "mode": "countdown",
   "durationSec": 300,
   "autoRestart": false,
   "color": "#38bdf8"
@@ -72,6 +78,11 @@ Body contoh:
 - `POST /api/timer/resume`
 - `POST /api/timer/reset`
 - `POST /api/timer/add`
+
+Contoh start mode count-up:
+```json
+{ "mode": "countup", "seconds": 14400 }
+```
 
 Contoh tambah waktu:
 ```json

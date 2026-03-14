@@ -96,19 +96,30 @@ function fmt(ms){
 function render(state){
   if (!state) return;
   totalMs = Number(state.totalMs) || totalMs;
+  const mode = state.mode === 'countup' ? 'countup' : 'countdown';
+  const elapsed = Math.max(0, Number(state.elapsedMs) || 0);
   const rem = Math.max(0, Number(state.remainingMs) || 0);
   running = !!state.running;
+  const display = state.displayMs != null
+    ? Math.max(0, Number(state.displayMs) || 0)
+    : (mode === 'countup' ? elapsed : rem);
 
   labelEl.textContent = state.label || 'COUNTDOWN';
-  valueEl.textContent = fmt(rem);
-  subEl.textContent = running ? 'RUNNING' : (rem <= 0 ? 'FINISHED' : 'PAUSED');
+  valueEl.textContent = fmt(display);
+  subEl.textContent = running
+    ? (mode === 'countup' ? 'RUNNING · COUNT-UP' : 'RUNNING · COUNTDOWN')
+    : (rem <= 0 ? 'FINISHED' : 'PAUSED');
   wrap.classList.toggle('paused', !running && rem > 0);
 
   if (state.color) {
     document.documentElement.style.setProperty('--accent', state.color);
   }
 
-  const pct = totalMs > 0 ? Math.max(0, Math.min(1, rem / totalMs)) : 0;
+  const pct = totalMs > 0
+    ? (mode === 'countup'
+        ? Math.max(0, Math.min(1, elapsed / totalMs))
+        : Math.max(0, Math.min(1, rem / totalMs)))
+    : 0;
   barFill.style.width = (pct * 100).toFixed(2) + '%';
 }
 

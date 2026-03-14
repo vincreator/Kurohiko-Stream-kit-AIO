@@ -367,9 +367,9 @@ app.post('/webhook/trakteer', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── TIMER / COUNTDOWN WIDGET ───────────────────────────
+// ── TIMER / COUNTDOWN / COUNT-UP WIDGET ────────────────
 // Widget OBS realtime yang bisa Start/Pause/Resume/Reset dari dashboard/API.
-// Tick dikelola di server agar sinkron antar semua client.
+// Mendukung 2 mode: countdown dan countup (stopwatch target).
 
 let _timerConfigCache = null;
 function loadTimerConfig() {
@@ -378,6 +378,7 @@ function loadTimerConfig() {
   catch {
     _timerConfigCache = {
       label: 'COUNTDOWN',
+      mode: 'countdown',
       durationSec: 300,
       autoRestart: false,
       color: '#38bdf8'
@@ -393,9 +394,10 @@ function saveTimerConfig(cfg) {
 
 const timerState = {
   running: false,
+  mode: (loadTimerConfig().mode === 'countup') ? 'countup' : 'countdown',
   durationMs: (loadTimerConfig().durationSec || 300) * 1000,
-  remainingMs: (loadTimerConfig().durationSec || 300) * 1000,
-  endsAt: 0,
+  elapsedMs: 0,     // akumulasi elapsed saat paused/stopped
+  startedAt: 0,     // timestamp saat running=true
   _lastSecond: null,
 };
 
@@ -404,15 +406,21 @@ function clampNumber(v, min, max, def) {
   if (!Number.isFinite(n)) return def;
   return Math.max(min, Math.min(max, n));
 }
-function getTimerRemainingMs() {
-  if (!timerState.running) return Math.max(0, timerState.remainingMs);
-  return Math.max(0, timerState.endsAt - Date.now());
+function getCurrentElapsedMs() {
+  if (!timerState.running) return Math.max(0, timerState.elapsedMs);
+  return Math.max(0, timerState.elapsedMs + (Date.now() - timerState.startedAt));
 }
 function getTimerSnapshot() {
   const cfg = loadTimerConfig();
+  const elapsedMs = getCurrentElapsedMs();
+  const remainingMs = Math.max(0, timerState.durationMs - elapsedMs);
+  const displayMs = timerState.mode === 'countup' ? elapsedMs : remainingMs;
   return {
     running: timerState.running,
-    remainingMs: getTimerRemainingMs(),
+    mode: timerState.mode,
+    elapsedMs,
+    remainingMs,
+    displayMs,
     totalMs: timerState.durationMs,
     label: cfg.label || 'COUNTDOWN',
     autoRestart: !!cfg.autoRestart,
@@ -426,27 +434,29 @@ function emitTimerSync() {
 // Tick loop: emit per detik agar ringan tapi tetap realtime
 setInterval(() => {
   if (!timerState.running) return;
-  const rem = getTimerRemainingMs();
-  const sec = Math.ceil(rem / 1000);
+  const elapsed = getCurrentElapsedMs();
+  const modeSec = timerState.mode === 'countup'
+    ? Math.floor(elapsed / 1000)
+    : Math.ceil(Math.max(0, timerState.durationMs - elapsed) / 1000);
 
-  if (sec !== timerState._lastSecond) {
-    timerState._lastSecond = sec;
+  if (modeSec !== timerState._lastSecond) {
+    timerState._lastSecond = modeSec;
     emitTimerSync();
   }
 
-  if (rem <= 0) {
+  if (elapsed >= timerState.durationMs) {
     const cfg = loadTimerConfig();
     timerState.running = false;
-    timerState.remainingMs = 0;
-    timerState.endsAt = 0;
+    timerState.elapsedMs = timerState.durationMs;
+    timerState.startedAt = 0;
     timerState._lastSecond = null;
     emitTimerSync();
     io.emit('timer-finished');
 
     if (cfg.autoRestart) {
       timerState.running = true;
-      timerState.remainingMs = timerState.durationMs;
-      timerState.endsAt = Date.now() + timerState.remainingMs;
+      timerState.elapsedMs = 0;
+      timerState.startedAt = Date.now();
       timerState._lastSecond = null;
       emitTimerSync();
     }
@@ -458,24 +468,30 @@ app.get('/api/timer/config', (req, res) => res.json(loadTimerConfig()));
 app.post('/api/timer/config', (req, res) => {
   const prev = loadTimerConfig();
   const body = req.body || {};
+  const nextMode = body.mode === 'countup' ? 'countup' : (body.mode === 'countdown' ? 'countdown' : (prev.mode || 'countdown'));
   const next = {
     ...prev,
     label: String(body.label ?? prev.label ?? 'COUNTDOWN').slice(0, 40),
+    mode: nextMode,
     durationSec: clampNumber(body.durationSec, 1, 24 * 60 * 60, prev.durationSec || 300),
     autoRestart: !!body.autoRestart,
     color: /^#[0-9a-fA-F]{6}$/.test(String(body.color || '')) ? String(body.color) : (prev.color || '#38bdf8')
   };
   const ok = saveTimerConfig(next);
 
-  // Kalau timer belum jalan, sinkronkan total+remaining ke durasi baru
+  timerState.mode = next.mode;
+  timerState.durationMs = next.durationSec * 1000;
+
+  // Jika tidak running, reset ke baseline config baru
   if (!timerState.running) {
-    timerState.durationMs = next.durationSec * 1000;
-    timerState.remainingMs = timerState.durationMs;
+    timerState.elapsedMs = 0;
   } else {
-    // Saat running, hanya update totalMs (remaining tetap berjalan)
-    timerState.durationMs = next.durationSec * 1000;
+    // Jika running, clamp elapsed agar tidak melebihi target baru
+    timerState.elapsedMs = Math.min(getCurrentElapsedMs(), timerState.durationMs);
+    timerState.startedAt = Date.now();
   }
 
+  timerState._lastSecond = null;
   emitTimerSync();
   io.emit('timer-config-updated', next);
   res.json({ ok, config: next });
@@ -486,11 +502,13 @@ app.get('/api/timer/state', (req, res) => res.json(getTimerSnapshot()));
 app.post('/api/timer/start', (req, res) => {
   const body = req.body || {};
   const cfg = loadTimerConfig();
+  const mode = body.mode === 'countup' ? 'countup' : (body.mode === 'countdown' ? 'countdown' : (cfg.mode || 'countdown'));
   const sec = clampNumber(body.seconds, 1, 24 * 60 * 60, cfg.durationSec || 300);
+  timerState.mode = mode;
   timerState.durationMs = sec * 1000;
-  timerState.remainingMs = timerState.durationMs;
+  timerState.elapsedMs = 0;
   timerState.running = true;
-  timerState.endsAt = Date.now() + timerState.remainingMs;
+  timerState.startedAt = Date.now();
   timerState._lastSecond = null;
   emitTimerSync();
   res.json({ ok: true, state: getTimerSnapshot() });
@@ -498,9 +516,9 @@ app.post('/api/timer/start', (req, res) => {
 
 app.post('/api/timer/pause', (req, res) => {
   if (timerState.running) {
-    timerState.remainingMs = getTimerRemainingMs();
+    timerState.elapsedMs = getCurrentElapsedMs();
     timerState.running = false;
-    timerState.endsAt = 0;
+    timerState.startedAt = 0;
     timerState._lastSecond = null;
   }
   emitTimerSync();
@@ -508,9 +526,11 @@ app.post('/api/timer/pause', (req, res) => {
 });
 
 app.post('/api/timer/resume', (req, res) => {
-  if (!timerState.running && timerState.remainingMs > 0) {
+  const elapsed = getCurrentElapsedMs();
+  if (!timerState.running && elapsed < timerState.durationMs) {
+    timerState.elapsedMs = elapsed;
     timerState.running = true;
-    timerState.endsAt = Date.now() + timerState.remainingMs;
+    timerState.startedAt = Date.now();
     timerState._lastSecond = null;
   }
   emitTimerSync();
@@ -519,8 +539,8 @@ app.post('/api/timer/resume', (req, res) => {
 
 app.post('/api/timer/reset', (req, res) => {
   timerState.running = false;
-  timerState.endsAt = 0;
-  timerState.remainingMs = timerState.durationMs;
+  timerState.startedAt = 0;
+  timerState.elapsedMs = 0;
   timerState._lastSecond = null;
   emitTimerSync();
   res.json({ ok: true, state: getTimerSnapshot() });
@@ -528,13 +548,22 @@ app.post('/api/timer/reset', (req, res) => {
 
 app.post('/api/timer/add', (req, res) => {
   const body = req.body || {};
-  const addSec = clampNumber(body.seconds, -24 * 60 * 60, 24 * 60 * 60, 0);
-  if (timerState.running) {
-    timerState.endsAt += addSec * 1000;
-    timerState.remainingMs = getTimerRemainingMs();
+  const addMs = clampNumber(body.seconds, -24 * 60 * 60, 24 * 60 * 60, 0) * 1000;
+
+  if (timerState.mode === 'countup') {
+    // Count-up: +/− memajukan/memundurkan elapsed
+    const curElapsed = getCurrentElapsedMs();
+    const nextElapsed = Math.max(0, Math.min(timerState.durationMs, curElapsed + addMs));
+    timerState.elapsedMs = nextElapsed;
+    if (timerState.running) timerState.startedAt = Date.now();
   } else {
-    timerState.remainingMs = Math.max(0, timerState.remainingMs + addSec * 1000);
+    // Countdown: +/− menambah/mengurangi sisa waktu (duration berubah, elapsed tetap)
+    const curElapsed = getCurrentElapsedMs();
+    timerState.durationMs = Math.max(1000, timerState.durationMs + addMs);
+    timerState.elapsedMs = Math.min(curElapsed, timerState.durationMs);
+    if (timerState.running) timerState.startedAt = Date.now();
   }
+
   timerState._lastSecond = null;
   emitTimerSync();
   res.json({ ok: true, state: getTimerSnapshot() });

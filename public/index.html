@@ -407,8 +407,20 @@ body::after{
 
     <div style="background:var(--panel2);border:1px solid var(--bd2);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
       <div style="font-size:.56rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--tx2);margin-bottom:6px;">Widget Config</div>
+      <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Mode</div>
+      <select id="timer-mode" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;outline:none;margin-bottom:9px;">
+        <option value="countdown">Countdown</option>
+        <option value="countup">Count-up / Stopwatch</option>
+      </select>
       <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Label</div>
       <input id="timer-label" type="text" maxlength="40" placeholder="COUNTDOWN" style="width:100%;background:var(--panel);border:1px solid var(--bd2);color:var(--tx);border-radius:6px;padding:7px 10px;font-size:.72rem;outline:none;margin-bottom:9px;">
+      <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Preset Scene</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:9px;">
+        <button onclick="applyTimerPreset('starting')" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);padding:7px;border-radius:7px;font-size:.62rem;font-weight:700;cursor:pointer;">Starting Soon (5m)</button>
+        <button onclick="applyTimerPreset('brb')" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);padding:7px;border-radius:7px;font-size:.62rem;font-weight:700;cursor:pointer;">BRB (10m)</button>
+        <button onclick="applyTimerPreset('intermission')" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);padding:7px;border-radius:7px;font-size:.62rem;font-weight:700;cursor:pointer;">Intermission (15m)</button>
+        <button onclick="applyTimerPreset('live')" style="background:var(--panel);border:1px solid var(--bd2);color:var(--tx);padding:7px;border-radius:7px;font-size:.62rem;font-weight:700;cursor:pointer;">Live Stopwatch</button>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div>
           <div style="font-size:.58rem;color:var(--tx2);margin-bottom:5px;">Durasi (detik)</div>
@@ -1182,8 +1194,27 @@ function fmtTimerMs(ms) {
 function paintTimerState(state) {
   const el = document.getElementById('timer-state-preview');
   if (!el || !state) return;
-  el.textContent = fmtTimerMs(state.remainingMs);
+  const disp = state.displayMs != null
+    ? Number(state.displayMs)
+    : (state.mode === 'countup' ? Number(state.elapsedMs || 0) : Number(state.remainingMs || 0));
+  el.textContent = fmtTimerMs(disp);
   el.style.color = state.running ? 'var(--gn)' : 'var(--ac)';
+}
+
+function applyTimerPreset(key) {
+  const presets = {
+    starting: { label: 'STREAM STARTING IN', mode: 'countdown', durationSec: 300, color: '#38bdf8' },
+    brb: { label: 'BE RIGHT BACK', mode: 'countdown', durationSec: 600, color: '#f59e0b' },
+    intermission: { label: 'INTERMISSION', mode: 'countdown', durationSec: 900, color: '#a78bfa' },
+    live: { label: 'LIVE TIMER', mode: 'countup', durationSec: 4 * 60 * 60, color: '#22c55e' },
+  };
+  const p = presets[key];
+  if (!p) return;
+  document.getElementById('timer-label').value = p.label;
+  document.getElementById('timer-mode').value = p.mode;
+  document.getElementById('timer-duration').value = p.durationSec;
+  document.getElementById('timer-color').value = p.color;
+  toast('Preset: ' + p.label);
 }
 
 async function openTimerSetup() {
@@ -1205,6 +1236,7 @@ async function openTimerSetup() {
     const cfg = await cfgRes.json();
     const st = await stRes.json();
     document.getElementById('timer-label').value = cfg.label || 'COUNTDOWN';
+    document.getElementById('timer-mode').value = cfg.mode || 'countdown';
     document.getElementById('timer-duration').value = Number(cfg.durationSec) || 300;
     document.getElementById('timer-color').value = cfg.color || '#38bdf8';
     document.getElementById('timer-auto-restart').checked = !!cfg.autoRestart;
@@ -1237,6 +1269,7 @@ async function saveTimerConfig() {
   try {
     const body = {
       label: document.getElementById('timer-label').value.trim() || 'COUNTDOWN',
+      mode: document.getElementById('timer-mode').value || 'countdown',
       durationSec: Number(document.getElementById('timer-duration').value) || 300,
       color: document.getElementById('timer-color').value || '#38bdf8',
       autoRestart: !!document.getElementById('timer-auto-restart').checked
@@ -1261,7 +1294,10 @@ async function timerAction(type, value) {
       await fetch('/api/timer/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seconds: Number(document.getElementById('timer-duration').value) || 300 })
+        body: JSON.stringify({
+          mode: document.getElementById('timer-mode').value || 'countdown',
+          seconds: Number(document.getElementById('timer-duration').value) || 300
+        })
       });
     } else if (type === 'add') {
       await fetch('/api/timer/add', {
