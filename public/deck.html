@@ -392,6 +392,7 @@ body::after{
 
   <div class="searchbar">
     <input type="text" class="sbox" id="srch" placeholder="Search..." oninput="render()">
+    <button class="setbtn" onclick="toggleSoundboardMode()" id="soundboard-mode-btn" title="Soundboard Mode (audio lokal, tanpa OBS)">🔊</button>
     <button class="setbtn" onclick="toggleQueueMode()" id="queue-mode-btn" title="Queue Mode (antrikan trigger)">⏳</button>
     <button class="setbtn" onclick="openPlaylist()" id="playlist-btn" title="Playlist Mode">📃</button>
     <button class="setbtn" onclick="triggerRandom()" id="rnd-btn" title="Random Trigger — pilih meme acak">🎲</button>
@@ -468,6 +469,18 @@ body::after{
           <div class="toggle" id="hide-mobile-toggle"></div>
         </div>
         <div style="font-size:.52rem;color:var(--tx3);margin-top:5px;line-height:1.5;">Sembunyikan topbar, search, edit & settings saat diakses dari HP. Tahan 3 detik di area kosong untuk buka settings.</div>
+      </div>
+      <div>
+        <div class="fl">Soundboard</div>
+        <div class="toggle-row" onclick="toggleSoundboardMode()">
+          <span>Soundboard mode (tanpa OBS)</span>
+          <div class="toggle" id="soundboard-toggle"></div>
+        </div>
+        <div class="toggle-row" onclick="toggleSoundboardStopPrev()" style="margin-top:6px;">
+          <span>Stop sound sebelumnya</span>
+          <div class="toggle" id="soundboard-stop-toggle"></div>
+        </div>
+        <div style="font-size:.52rem;color:var(--tx3);margin-top:5px;line-height:1.5;">Saat aktif, klik card audio akan diputar langsung di browser lokal. Image/video tetap trigger ke OBS.</div>
       </div>
       <div id="shortcut-display-section">
         <div class="fl">Shortcut Display</div>
@@ -678,6 +691,7 @@ let files = [], active = null, lastSig = '';
 let curTab = 'all'; // 'all' or tab id
 let editingTabId = null;
 let playlist = [];
+let _sbPlayers = []; // active Audio players in soundboard mode
 
 let settings = defSettings();
 let settingsSaveTimer = null;
@@ -685,7 +699,8 @@ function defSettings() {
   return {
     cols: 4, rows: 4, hideAll: false, hideMobileUI: false, showShortcuts: false,
     tabs: [], counterColors: {}, shortcuts: {}, counterShortcuts: {}, tabShortcuts: {},
-    queueMode: false, playlistItems: [], playlistLoop: false
+    queueMode: false, playlistItems: [], playlistLoop: false,
+    soundboardMode: false, soundboardStopPrev: true
   };
 }
 async function loadSettingsFromServer() {
@@ -698,6 +713,7 @@ async function loadSettingsFromServer() {
     }
   } catch {}
   applyQueueModeUI();
+  applySoundboardModeUI();
   updateGlobalKeyListeners();
 }
 function saveSettings() {
@@ -1006,6 +1022,11 @@ async function trigger(name, forceQueue = null) {
   const f = files.find(x => x.name === name); if (!f) return;
   active = name;
   document.querySelectorAll('.card').forEach(c => c.classList.toggle('act', c.dataset.nm === active));
+  const t = getType(name);
+  if (settings.soundboardMode && t === 'audio') {
+    playLocalSoundboard(f);
+    return;
+  }
   const useQueue = forceQueue === null ? !!settings.queueMode : !!forceQueue;
   await fetch('/trigger', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ filename: name, ...(f.settings || {}), queueMode: useQueue }) });
@@ -1026,6 +1047,57 @@ function toggleQueueMode() {
   saveSettings();
   applyQueueModeUI();
   toast(settings.queueMode ? '⏳ Queue Mode ON' : '▶ Queue Mode OFF');
+}
+
+function applySoundboardModeUI() {
+  const btn = document.getElementById('soundboard-mode-btn');
+  if (btn) {
+    btn.classList.toggle('on', !!settings.soundboardMode);
+    btn.title = settings.soundboardMode
+      ? 'Soundboard ON — audio diputar lokal (tanpa OBS)'
+      : 'Soundboard OFF — semua trigger ke OBS';
+  }
+  const t1 = document.getElementById('soundboard-toggle');
+  const t2 = document.getElementById('soundboard-stop-toggle');
+  if (t1) t1.classList.toggle('on', !!settings.soundboardMode);
+  if (t2) t2.classList.toggle('on', settings.soundboardStopPrev !== false);
+}
+
+function stopAllSoundboardAudio() {
+  _sbPlayers.forEach(a => {
+    try { a.pause(); a.currentTime = 0; } catch {}
+  });
+  _sbPlayers = [];
+}
+
+function toggleSoundboardMode() {
+  settings.soundboardMode = !settings.soundboardMode;
+  saveSettings();
+  applySoundboardModeUI();
+  if (!settings.soundboardMode) stopAllSoundboardAudio();
+  toast(settings.soundboardMode ? '🔊 Soundboard ON (audio lokal)' : '🔇 Soundboard OFF (kembali ke OBS)');
+}
+
+function toggleSoundboardStopPrev() {
+  settings.soundboardStopPrev = !(settings.soundboardStopPrev !== false);
+  saveSettings();
+  applySoundboardModeUI();
+}
+
+function playLocalSoundboard(f) {
+  if (!f) return;
+  if (settings.soundboardStopPrev !== false) stopAllSoundboardAudio();
+  const a = new Audio('/assets/' + encodeURIComponent(f.name));
+  const vol = Math.max(0, Math.min(1, ((f.settings && f.settings.volume != null) ? f.settings.volume : 80) / 100));
+  a.volume = vol;
+  a.preload = 'auto';
+  a.onended = () => { _sbPlayers = _sbPlayers.filter(x => x !== a); };
+  a.onerror = () => { _sbPlayers = _sbPlayers.filter(x => x !== a); toast('Gagal play audio', '#ef4444'); };
+  _sbPlayers.push(a);
+  a.play().catch(() => {
+    _sbPlayers = _sbPlayers.filter(x => x !== a);
+    toast('Play ditolak browser (butuh interaksi user)', '#ef4444');
+  });
 }
 
 function savePlaylistState() {
@@ -1216,6 +1288,7 @@ function updateToggle() {
   document.getElementById('hide-mobile-toggle').classList.toggle('on', !!settings.hideMobileUI);
   document.getElementById('show-shortcuts-toggle').classList.toggle('on', !!settings.showShortcuts);
   document.getElementById('grid').classList.toggle('show-shortcuts', !!settings.showShortcuts);
+  applySoundboardModeUI();
 }
 
 // ─── SHORTCUT VISIBILITY & SYNC ─────────────────────────
@@ -1698,10 +1771,16 @@ document.getElementById('playlist-overlay').addEventListener('click', e => {
 // ─── INIT ────────────────────────────────────────────────
 (async () => {
   await loadSettingsFromServer();
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('soundboard') === '1' || qs.get('mode') === 'soundboard') {
+    settings.soundboardMode = true;
+    saveSettings();
+  }
   playlist = Array.isArray(settings.playlistItems) ? [...settings.playlistItems] : [];
   applyGridSize();
   applyMobileClean();
   applyQueueModeUI();
+  applySoundboardModeUI();
   applyShortcutVisibility();
   await loadCounters();
   loadFiles();
@@ -1725,12 +1804,14 @@ document.getElementById('playlist-overlay').addEventListener('click', e => {
     const wasTab = curTab;
     settings = { ...defSettings(), ...data };
     playlist = Array.isArray(settings.playlistItems) ? [...settings.playlistItems] : [];
+    if (!settings.soundboardMode) stopAllSoundboardAudio();
     if (!settings.tabs.find(t => t.id === wasTab)) {
       curTab = settings.hideAll ? (settings.tabs[0]?.id || 'all') : 'all';
     }
     renderTabs();
     render();
     applyQueueModeUI();
+    applySoundboardModeUI();
     applyMobileClean();
     updateCounterDisplay();
   });

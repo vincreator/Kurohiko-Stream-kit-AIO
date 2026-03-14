@@ -32,6 +32,7 @@ Ditengah jalan keinget mau nambah WC, Kamar, Pintu, Jendela,etc. Jadinya kyk ya 
 * **🔔 Donation Alert:** Webhook Saweria & Trakteer — alert otomatis tampil di OBS saat donasi masuk, lengkap dengan nama, jumlah, dan pesan
 * **📃 Media Queue / Playlist Mode:** Trigger bisa diantrikan (FIFO) dan jalankan playlist beberapa media sekali klik
 * **⏱️ Timer / Countdown / Stopwatch:** Widget realtime untuk OBS (countdown + count-up) + kontrol Start/Pause/Resume/Reset dari dashboard
+* **🔊 Soundboard Mode (tanpa OBS):** Mainkan clip audio langsung dari Deck secara lokal
 
 ---
 
@@ -76,6 +77,7 @@ Karena folder `node_modules` tidak disertakan di repository ini, ikuti langkah b
 | 🔔 Donation Alert (Saweria & Trakteer) | [docs/donation-alert.md](docs/donation-alert.md) |
 | 📃 Media Queue / Playlist Mode | [docs/media-queue-playlist.md](docs/media-queue-playlist.md) |
 | ⏱️ Timer / Countdown / Stopwatch | [docs/timer-countdown-widget.md](docs/timer-countdown-widget.md) |
+| 🔊 Soundboard Mode (tanpa OBS) | [docs/soundboard-mode.md](docs/soundboard-mode.md) |
 
 ---
 
